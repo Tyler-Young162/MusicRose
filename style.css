@@ -1,0 +1,199 @@
+body {
+    margin: 0;
+    overflow: hidden;
+    background-color: #000; /* Dark background for the neon effect */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    font-family: Arial, sans-serif;
+}
+
+canvas {
+    display: block;
+}
+
+#randomizeButton {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    padding: 12px 24px;
+    font-size: 16px;
+    font-weight: bold;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 1001;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+#randomizeButton:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+#randomizeButton:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+#controlPanel {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    width: 320px;
+    max-height: 90vh;
+    overflow-y: auto;
+    background: rgba(30, 30, 30, 0.95);
+    color: #fff;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    font-size: 12px;
+}
+
+#controlPanel h3 {
+    margin: 0 0 15px 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #555;
+    font-size: 16px;
+}
+
+#controlPanel h4 {
+    margin: 15px 0 8px 0;
+    font-size: 13px;
+    color: #aaa;
+}
+
+.section {
+    margin-bottom: 15px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #333;
+}
+
+.section:last-child {
+    border-bottom: none;
+}
+
+.control-group {
+    margin-bottom: 12px;
+}
+
+.control-group label {
+    display: block;
+    margin-bottom: 4px;
+    color: #ccc;
+    font-size: 11px;
+}
+
+.control-group input[type="range"] {
+    width: 100%;
+    margin-bottom: 4px;
+}
+
+.control-group .value-display {
+    display: inline-block;
+    min-width: 60px;
+    text-align: right;
+    color: #0ff;
+    font-weight: bold;
+}
+
+.control-group input[type="number"] {
+    width: 80px;
+    padding: 4px;
+    background: #222;
+    border: 1px solid #555;
+    color: #fff;
+    border-radius: 4px;
+    margin-left: 8px;
+}
+
+#recordingPanel {
+    position: fixed;
+    top: 20px;
+    left: 200px;
+    background: rgba(30, 30, 30, 0.95);
+    color: #fff;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    font-size: 12px;
+}
+
+#recordingPanel h4 {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+    color: #fff;
+}
+
+#recordingPanel button {
+    padding: 8px 16px;
+    margin: 5px 5px 5px 0;
+    font-size: 12px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+#recordingPanel button:hover:not(:disabled) {
+    transform: translateY(-1px);
+}
+
+#recordingPanel button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+#recordingPanel button#stopRecording {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.layer-controls {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #555;
+}
+
+.layer-controls label {
+    display: block;
+    margin: 5px 0;
+    color: #ccc;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.layer-controls input[type="checkbox"] {
+    margin-right: 8px;
+    cursor: pointer;
+}
+
+#recordingPanel select {
+    width: 100%;
+    padding: 6px;
+    background: #222;
+    border: 1px solid #555;
+    color: #fff;
+    border-radius: 4px;
+    font-size: 12px;
+    margin-top: 5px;
+}
+
+#recordingPanel .control-group {
+    margin-bottom: 10px;
+}
+
+#recordingPanel .control-group label {
+    display: block;
+    margin-bottom: 4px;
+    color: #ccc;
+    font-size: 11px;
+}
