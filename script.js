@@ -1153,8 +1153,8 @@ function recordAudioData() {
 
     // 重叠录制逻辑：同时向所有应该录制的圈写入数据
     // 每个圈从前一圈的25%时开始，但都画完整的100%
-    // 为了加快录制速度，每帧录制2个样本（速度快一倍）
-    const samplesPerFrame = 2; // 每帧录制的样本数（2倍速度）
+    // 为了加快录制速度，每帧录制3个样本（速度快1.5倍，平衡性能和效果）
+    const samplesPerFrame = 3; // 每帧录制的样本数（3倍速度）
     
     for (let i = 0; i < samplesPerFrame; i++) {
         voiceprintData.rings.forEach((ring, ringIndex) => {
@@ -1280,7 +1280,7 @@ function drawCircleVoiceprint(ring, ringIndex, maxSamples) {
     if (style === 'gradient-wave') {
         // Professional gradient waveform with color based on amplitude
         ctx.lineWidth = 3;
-        ctx.shadowBlur = 15;
+        ctx.shadowBlur = 5; // 降低阴影模糊度以提升性能（从15降到5）
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
 
@@ -1356,7 +1356,7 @@ function drawCircleVoiceprint(ring, ringIndex, maxSamples) {
 
     } else if (style === 'spectrum-bars') {
         // Spectrum bars for standard circles with gradient colors
-        ctx.shadowBlur = 8;
+        ctx.shadowBlur = 3; // 降低阴影模糊度以提升性能（从8降到3）
 
         // Get base color for this circle
         const baseColor = params.innerCircles[ringIndex].color || 'white';
@@ -1365,8 +1365,8 @@ function drawCircleVoiceprint(ring, ringIndex, maxSamples) {
         // Outer circles (larger radius) will have wider bars
         const circumference = 2 * Math.PI * baseRadius;
         const unitWidth = circumference / maxSamples;
-        // Use 80% of unit width for bar, leaving 20% for gap. Min 1px.
-        const barWidth = Math.max(1, unitWidth * 0.8);
+        // Use 30% of unit width for bar (更细的柱子), leaving 70% for gap. Min 0.5px.
+        const barWidth = Math.max(0.5, unitWidth * 0.3);
 
         // 计算基础高度和用户声音高度的占比
         const baseHeightRatio = voiceprintSettings.baseHeightRatio; // 基础高度占比（默认0.4）
@@ -1379,6 +1379,10 @@ function drawCircleVoiceprint(ring, ringIndex, maxSamples) {
         
         // 获取当前圆圈的声波高度缩放因子
         const waveHeightScale = params.innerCircles[ringIndex].waveHeight || 1.0;
+        
+        // 性能优化：预计算固定值，避免在循环中重复计算
+        const baseColorDark = getGradientColor(baseColor, 0);
+        ctx.shadowColor = baseColor;
 
         // Draw bars for ALL recorded samples (no step/skip)
         for (let i = 0; i < maxSamples; i++) {
@@ -1389,26 +1393,33 @@ function drawCircleVoiceprint(ring, ringIndex, maxSamples) {
             // 计算实际高度：基础高度 + 用户声音高度 * 振幅，然后乘以缩放因子
             const barLength = (baseHeight + amplitude * voiceHeight) * waveHeightScale;
 
+            // 预计算三角函数（只计算一次）
+            const cosA = Math.cos(angle);
+            const sinA = Math.sin(angle);
+
             // Base point on the circle
-            const x1 = centerX + Math.cos(angle) * baseRadius;
-            const y1 = centerY + Math.sin(angle) * baseRadius;
+            const x1 = centerX + cosA * baseRadius;
+            const y1 = centerY + sinA * baseRadius;
 
             // Tip point (radial outward)
-            const x2 = centerX + Math.cos(angle) * (baseRadius + barLength);
-            const y2 = centerY + Math.sin(angle) * (baseRadius + barLength);
+            const x2 = centerX + cosA * (baseRadius + barLength);
+            const y2 = centerY + sinA * (baseRadius + barLength);
 
             // Calculate bar width direction (perpendicular to radial)
             const perpAngle = angle + Math.PI / 2;
             const dx = Math.cos(perpAngle) * barWidth * 0.5;
             const dy = Math.sin(perpAngle) * barWidth * 0.5;
 
-            // Create gradient from base (dark) to tip (light)
-            const gradient = ctx.createLinearGradient(x1, y1, x2, y2);
-            gradient.addColorStop(0, getGradientColor(baseColor, 0)); // Dark at base
-            gradient.addColorStop(1, getGradientColor(baseColor, amplitude)); // Light at tip
-
-            ctx.fillStyle = gradient;
-            ctx.shadowColor = baseColor;
+            // 性能优化：使用简化的gradient（只在有声音时创建，否则使用纯色）
+            if (amplitude > 0.05) {
+                const gradient = ctx.createLinearGradient(x1, y1, x2, y2);
+                gradient.addColorStop(0, baseColorDark); // Dark at base
+                gradient.addColorStop(1, getGradientColor(baseColor, amplitude)); // Light at tip
+                ctx.fillStyle = gradient;
+            } else {
+                // 静音时使用纯色，避免创建gradient
+                ctx.fillStyle = baseColorDark;
+            }
 
             ctx.beginPath();
             ctx.moveTo(x1 - dx, y1 - dy);
@@ -1420,7 +1431,7 @@ function drawCircleVoiceprint(ring, ringIndex, maxSamples) {
         }
     } else if (style === 'glow-particles') {
         // Glowing particle effect
-        ctx.shadowBlur = 20;
+        ctx.shadowBlur = 5; // 降低阴影模糊度以提升性能（从10降到5） // 降低阴影模糊度以提升性能（从20降到10）
         const particleCount = Math.min(80, maxSamples);
         const step = Math.floor(maxSamples / particleCount);
         
@@ -1454,7 +1465,7 @@ function drawCircleVoiceprint(ring, ringIndex, maxSamples) {
         }
     } else {
         // Generic fallback for other styles
-        ctx.shadowBlur = 10;
+        ctx.shadowBlur = 5; // 降低阴影模糊度以提升性能（从10降到5）
         
         // 获取当前圆圈的声波高度缩放因子
         const waveHeightScale = params.innerCircles[ringIndex].waveHeight || 1.0;
@@ -1523,7 +1534,7 @@ function drawSegmentedVoiceprint(ring, ringIndex, maxSamples) {
 
     if (style === 'gradient-wave') {
         ctx.lineWidth = 3;
-        ctx.shadowBlur = 15;
+        ctx.shadowBlur = 5; // 降低阴影模糊度以提升性能（从15降到5）
         ctx.lineCap = 'round';
 
         // 优化：所有花瓣同时绘制，每个花瓣从自己的起点持续绘制到终点
@@ -1588,15 +1599,15 @@ function drawSegmentedVoiceprint(ring, ringIndex, maxSamples) {
             }
         }
     } else if (style === 'spectrum-bars') {
-        ctx.shadowBlur = 8;
+        ctx.shadowBlur = 3; // 降低阴影模糊度以提升性能（从8降到3）
 
         // Calculate dynamic bar width based on effective circumference
         // Effective circumference = total length of all segments
         const totalArcAngle = segmentAngleSize * numSegments;
         const effectiveCircumference = totalArcAngle * baseRadius;
         const unitWidth = effectiveCircumference / maxSamples;
-        // Use 80% of unit width for bar, leaving 20% for gap. Min 1px.
-        const barWidth = Math.max(1, unitWidth * 0.8);
+        // Use 30% of unit width for bar (更细的柱子), leaving 70% for gap. Min 0.5px.
+        const barWidth = Math.max(0.5, unitWidth * 0.3);
 
         // 计算基础高度和用户声音高度的占比
         const baseHeightRatio = voiceprintSettings.baseHeightRatio; // 基础高度占比（默认0.15）
@@ -1609,6 +1620,25 @@ function drawSegmentedVoiceprint(ring, ringIndex, maxSamples) {
         
         // 获取当前圆圈的声波高度缩放因子
         const waveHeightScale = circleParams.waveHeight || 1.0;
+        
+        // 性能优化：预计算所有segment的固定值
+        const segmentCache = [];
+        for (let segmentIdx = 0; segmentIdx < numSegments; segmentIdx++) {
+            const baseColor = circleParams.segmentColors[segmentIdx] || 'white';
+            const segmentStartAngle = circleParams.globalRotation + segmentIdx * (segmentAngleSize + gapSize);
+            const segmentMidAngle = segmentStartAngle + segmentAngleSize * 0.5;
+            const centerX = config.centerX + Math.cos(segmentMidAngle) * baseRadius;
+            const centerY = config.centerY + Math.sin(segmentMidAngle) * baseRadius;
+            const baseColorDark = getGradientColor(baseColor, 0);
+            
+            segmentCache.push({
+                baseColor,
+                baseColorDark,
+                segmentStartAngle,
+                centerX,
+                centerY
+            });
+        }
 
         // 优化：所有花瓣同时绘制，每个花瓣从自己的起点持续绘制到终点
         // 所有segment同时开始，使用相同的样本数据，从0持续绘制到actualSamplesToDraw
@@ -1619,60 +1649,63 @@ function drawSegmentedVoiceprint(ring, ringIndex, maxSamples) {
             const sampleIdx = posInSegment;
             const amplitude = ring.samples[sampleIdx] || 0;
             
+            // 预计算t值（所有segment共享）
+            const t = posInSegment / maxSamplesPerSegment;
+            
             // 内层循环：同时绘制所有segment（花瓣）
             for (let segmentIdx = 0; segmentIdx < numSegments; segmentIdx++) {
-                // Get base color for this segment
-                const baseColor = circleParams.segmentColors[segmentIdx] || 'white';
+                const cache = segmentCache[segmentIdx];
                 
-                // Calculate segment angles (pre-calculate for efficiency)
-                const segmentStartAngle = circleParams.globalRotation + segmentIdx * (segmentAngleSize + gapSize);
-                const segmentMidAngle = segmentStartAngle + segmentAngleSize * 0.5;
-                const centerX = config.centerX + Math.cos(segmentMidAngle) * baseRadius;
-                const centerY = config.centerY + Math.sin(segmentMidAngle) * baseRadius;
-
                 // Calculate angle for this position（每个segment从自己的起点开始绘制）
-                // t基于固定的maxSamplesPerSegment计算，而不是基于动态的actualSamplesToDraw
-                const t = posInSegment / maxSamplesPerSegment;
-                const angle = segmentStartAngle + t * segmentAngleSize;
+                const angle = cache.segmentStartAngle + t * segmentAngleSize;
+                
+                // 预计算三角函数
+                const cosA = Math.cos(angle);
+                const sinA = Math.sin(angle);
 
                 // Calculate base and tip points
-                const ox1 = config.centerX + Math.cos(angle) * baseRadius;
-                const oy1 = config.centerY + Math.sin(angle) * baseRadius;
+                const ox1 = config.centerX + cosA * baseRadius;
+                const oy1 = config.centerY + sinA * baseRadius;
 
                 // 计算实际高度：基础高度 + 用户声音高度 * 振幅，然后乘以缩放因子
                 const barLength = (baseHeight + amplitude * voiceHeight) * waveHeightScale;
-                const ox2 = config.centerX + Math.cos(angle) * (baseRadius + barLength);
-                const oy2 = config.centerY + Math.sin(angle) * (baseRadius + barLength);
+                const ox2 = config.centerX + cosA * (baseRadius + barLength);
+                const oy2 = config.centerY + sinA * (baseRadius + barLength);
 
                 // Apply self-rotation
-                const dx1 = ox1 - centerX;
-                const dy1 = oy1 - centerY;
+                const dx1 = ox1 - cache.centerX;
+                const dy1 = oy1 - cache.centerY;
                 const rx1 = dx1 * cosRot - dy1 * sinRot;
                 const ry1 = dx1 * sinRot + dy1 * cosRot;
-                const x1 = centerX + rx1;
-                const y1 = centerY + ry1;
+                const x1 = cache.centerX + rx1;
+                const y1 = cache.centerY + ry1;
 
-                const dx2 = ox2 - centerX;
-                const dy2 = oy2 - centerY;
+                const dx2 = ox2 - cache.centerX;
+                const dy2 = oy2 - cache.centerY;
                 const rx2 = dx2 * cosRot - dy2 * sinRot;
                 const ry2 = dx2 * sinRot + dy2 * cosRot;
-                const x2 = centerX + rx2;
-                const y2 = centerY + ry2;
+                const x2 = cache.centerX + rx2;
+                const y2 = cache.centerY + ry2;
 
-                // Calculate bar width
+                // Calculate bar width direction
                 const barAngle = Math.atan2(y2 - y1, x2 - x1);
-                // Use dynamic barWidth
                 const perpAngle = barAngle + Math.PI / 2;
-                const dxBar = Math.cos(perpAngle) * barWidth * 0.5;
-                const dyBar = Math.sin(perpAngle) * barWidth * 0.5;
+                const cosPerpA = Math.cos(perpAngle);
+                const sinPerpA = Math.sin(perpAngle);
+                const dxBar = cosPerpA * barWidth * 0.5;
+                const dyBar = sinPerpA * barWidth * 0.5;
 
-                // Create gradient from base (dark) to tip (light)
-                const gradient = ctx.createLinearGradient(x1, y1, x2, y2);
-                gradient.addColorStop(0, getGradientColor(baseColor, 0)); // Dark at base
-                gradient.addColorStop(1, getGradientColor(baseColor, amplitude)); // Light at tip
-
-                ctx.fillStyle = gradient;
-                ctx.shadowColor = baseColor;
+                // 性能优化：使用简化的gradient（只在有声音时创建，否则使用纯色）
+                if (amplitude > 0.05) {
+                    const gradient = ctx.createLinearGradient(x1, y1, x2, y2);
+                    gradient.addColorStop(0, cache.baseColorDark);
+                    gradient.addColorStop(1, getGradientColor(cache.baseColor, amplitude));
+                    ctx.fillStyle = gradient;
+                } else {
+                    ctx.fillStyle = cache.baseColorDark;
+                }
+                
+                ctx.shadowColor = cache.baseColor;
 
                 ctx.beginPath();
                 ctx.moveTo(x1 - dxBar, y1 - dyBar);
@@ -1726,7 +1759,7 @@ function drawSegmentedVoiceprint(ring, ringIndex, maxSamples) {
 
                 ctx.fillStyle = getAmplitudeColor(amplitude);
                 ctx.shadowColor = ctx.fillStyle;
-                ctx.shadowBlur = 10;
+                ctx.shadowBlur = 5; // 降低阴影模糊度以提升性能（从10降到5）
 
                 ctx.beginPath();
                 ctx.arc(x, y, 2 + amplitude * 3, 0, Math.PI * 2);
