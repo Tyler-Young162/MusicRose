@@ -8,26 +8,30 @@ const initialRadii = [0.15, 0.22, 0.31, 0.43]; // Circle 1, 2, 3, 4
 const params = {
     // Inner 4 circles - 根据用户给定的默认值
     innerCircles: [
-        { radius: 0.15, offsetX: 0.02, offsetY: -0.02 },   // Circle 1: 15.0%, 2.00%, -2.00%
-        { radius: 0.22, offsetX: 0.045, offsetY: 0.025 }, // Circle 2: 22.0%, 4.50%, 2.50%
-        { radius: 0.31, offsetX: -0.035, offsetY: 0.025 }, // Circle 3: 31.0%, -3.50%, 2.50%
-        { radius: 0.43, offsetX: 0.05, offsetY: 0.04 }   // Circle 4: 43.0%, 5.00%, 4.00%
+        { radius: 0.15, offsetX: 0.02, offsetY: -0.02, color: null, waveHeight: 1.0 },   // Circle 1
+        { radius: 0.22, offsetX: 0.045, offsetY: 0.025, color: null, waveHeight: 1.0 }, // Circle 2
+        { radius: 0.31, offsetX: -0.035, offsetY: 0.025, color: null, waveHeight: 1.0 }, // Circle 3
+        { radius: 0.43, offsetX: 0.05, offsetY: 0.04, color: null, waveHeight: 1.0 }   // Circle 4
     ],
     // Outer circle 5 (segmented petals)
     outerCircle5: {
-        radius: 0.33,              // 33% as default
-        segmentCount: 4,          // Number of segments (3-6)
-        segmentLength: 0.0,       // Variation ratio (0-20%) relative to initial length
-        selfRotation: 0.12,        // Self-rotation angle (radians)
-        globalRotation: 0,         // Global rotation angle (radians)
+        radius: 0.33,
+        segmentCount: 4,
+        segmentLength: 0.0,
+        selfRotation: 0.12,
+        globalRotation: 0,
+        segmentColors: [], // Array of colors for each segment
+        waveHeight: 1.0 // 声波高度缩放因子
     },
     // Outer circle 6 (segmented petals)
     outerCircle6: {
-        radius: 0.44,              // 44% as default
-        segmentCount: 4,           // Number of segments (3-6)
-        segmentLength: 0.0,        // Variation ratio (0-20%) relative to initial length
-        selfRotation: 0.12,        // Self-rotation angle (radians)
-        globalRotation: 0.3927,    // ~22.5 degrees (Math.PI / 8)
+        radius: 0.44,
+        segmentCount: 4,
+        segmentLength: 0.0,
+        selfRotation: 0.12,
+        globalRotation: 0.3927,
+        segmentColors: [], // Array of colors for each segment
+        waveHeight: 1.0 // 声波高度缩放因子
     }
 };
 
@@ -43,15 +47,18 @@ let audioContext = null;
 let analyser = null;
 let microphone = null;
 let dataArray = null;
+let mediaStream = null; // Keep stream alive
 let isRecording = false;
+let isSimulating = false;
+let simulationId = 0;
 let animationFrameId = null;
+let micPermissionGranted = false; // Track permission status
 
 // Voiceprint data storage (from inner to outer circles)
 // Each ring stores audio data points along the circle path
 const voiceprintData = {
     rings: [], // Array of rings, each ring contains audio samples
-    currentRingIndex: 0, // Current ring being recorded (0 = innermost)
-    sampleIndex: 0, // Current sample index in current ring
+    globalSampleIndex: 0, // Global sample index (based on first ring)
     maxRings: 6 // Maximum number of rings to record
 };
 
@@ -63,10 +70,53 @@ const layerVisibility = {
 
 // Voiceprint style and settings
 const voiceprintSettings = {
-    style: 'gradient-wave', // Professional styles
-    volumeThreshold: 0.2, // Normalized volume threshold (0-1)
-    isPaused: false // Paused when volume is too low
+    style: 'spectrum-bars', // Default to spectrum bars
+    showRawWaveforms: true, // Show raw waveforms on left side
+    baseHeightRatio: 0.15 // 基础高度占比（静音时的基线），默认15%，用户声音占85%
 };
+
+// Generate random rainbow color
+function getRandomRainbowColor() {
+    const hue = Math.random() * 360;
+    return `hsl(${hue}, 85%, 60%)`;
+}
+
+// Get gradient color based on base color and position (0=base, 1=tip)
+function getGradientColor(baseColor, position) {
+    // Extract HSL values from baseColor
+    const match = baseColor.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
+    if (!match) return baseColor;
+
+    const h = parseInt(match[1]);
+    const s = parseInt(match[2]);
+    const l = parseInt(match[3]);
+
+    // Bottom (position=0): darker, Top (position=1): lighter and more saturated
+    const newL = Math.min(95, l * (0.7 + position * 0.6));
+    const newS = Math.min(100, s * (1 + position * 0.2));
+
+    return `hsl(${h}, ${newS}%, ${newL}%)`;
+}
+
+// Initialize random colors for all circles
+function initializeColors() {
+    // Inner 4 circles
+    params.innerCircles.forEach(circle => {
+        circle.color = getRandomRainbowColor();
+    });
+
+    // Outer circle 5 segments
+    params.outerCircle5.segmentColors = [];
+    for (let i = 0; i < params.outerCircle5.segmentCount; i++) {
+        params.outerCircle5.segmentColors.push(getRandomRainbowColor());
+    }
+
+    // Outer circle 6 segments
+    params.outerCircle6.segmentColors = [];
+    for (let i = 0; i < params.outerCircle6.segmentCount; i++) {
+        params.outerCircle6.segmentColors.push(getRandomRainbowColor());
+    }
+}
 
 function init() {
     canvas = document.getElementById('canvas');
@@ -74,13 +124,14 @@ function init() {
         console.error('Canvas element not found!');
         return;
     }
-    
+
     ctx = canvas.getContext('2d');
     if (!ctx) {
         console.error('Could not get 2D context!');
         return;
     }
-    
+
+    initializeColors(); // Initialize random colors
     createControlPanel();
     setupRandomizeButton();
     setupRecordingControls();
@@ -118,9 +169,13 @@ function createControlPanel() {
             <label>圆圈 ${index + 1} - Y偏移:</label>
             <input type="range" id="innerY${index}" min="-0.1" max="0.1" step="0.005" value="${circle.offsetY}">
             <span class="value-display" id="innerY${index}Value">${(circle.offsetY * 100).toFixed(2)}%</span>
+            
+            <label>圆圈 ${index + 1} - 声波高度:</label>
+            <input type="range" id="innerWaveHeight${index}" min="0.5" max="2.0" step="0.1" value="${circle.waveHeight || 1.0}">
+            <span class="value-display" id="innerWaveHeight${index}Value">${(circle.waveHeight || 1.0).toFixed(1)}x</span>
         `;
         innerControls.appendChild(circleDiv);
-        
+
         // Add event listeners
         document.getElementById(`innerR${index}`).addEventListener('input', (e) => {
             params.innerCircles[index].radius = parseFloat(e.target.value);
@@ -137,8 +192,13 @@ function createControlPanel() {
             document.getElementById(`innerY${index}Value`).textContent = (params.innerCircles[index].offsetY * 100).toFixed(2) + '%';
             draw();
         });
+        document.getElementById(`innerWaveHeight${index}`).addEventListener('input', (e) => {
+            params.innerCircles[index].waveHeight = parseFloat(e.target.value);
+            document.getElementById(`innerWaveHeight${index}Value`).textContent = params.innerCircles[index].waveHeight.toFixed(1) + 'x';
+            draw();
+        });
     });
-    
+
     // Outer circle 5 controls
     const outer5Controls = document.getElementById('outerCircle5Controls');
     outer5Controls.innerHTML = `
@@ -156,10 +216,10 @@ function createControlPanel() {
             <label>每段长度 (变化比例):</label>
             <input type="range" id="outer5Segment" min="0" max="0.2" step="0.01" value="${params.outerCircle5.segmentLength}">
             <span class="value-display" id="outer5SegmentValue">${(() => {
-                const initialUnit = 1.0 / params.outerCircle5.segmentCount;
-                const actualLength = initialUnit * (1 + params.outerCircle5.segmentLength);
-                return (params.outerCircle5.segmentLength * 100).toFixed(1) + '% (实际: ' + (actualLength * 100).toFixed(1) + '%)';
-            })()}</span>
+            const initialUnit = 1.0 / params.outerCircle5.segmentCount;
+            const actualLength = initialUnit * (1 + params.outerCircle5.segmentLength);
+            return (params.outerCircle5.segmentLength * 100).toFixed(1) + '% (实际: ' + (actualLength * 100).toFixed(1) + '%)';
+        })()}</span>
         </div>
         <div class="control-group">
             <label>自旋角 (弧度):</label>
@@ -171,8 +231,13 @@ function createControlPanel() {
             <input type="range" id="outer5GlobalRot" min="0" max="6.28" step="0.01" value="${params.outerCircle5.globalRotation}">
             <span class="value-display" id="outer5GlobalRotValue">${params.outerCircle5.globalRotation.toFixed(3)}</span>
         </div>
+        <div class="control-group">
+            <label>声波高度:</label>
+            <input type="range" id="outer5WaveHeight" min="0.5" max="2.0" step="0.1" value="${params.outerCircle5.waveHeight || 1.0}">
+            <span class="value-display" id="outer5WaveHeightValue">${(params.outerCircle5.waveHeight || 1.0).toFixed(1)}x</span>
+        </div>
     `;
-    
+
     document.getElementById('outer5Radius').addEventListener('input', (e) => {
         params.outerCircle5.radius = parseFloat(e.target.value);
         document.getElementById('outer5RadiusValue').textContent = (params.outerCircle5.radius * 100).toFixed(1) + '%';
@@ -204,7 +269,12 @@ function createControlPanel() {
         document.getElementById('outer5GlobalRotValue').textContent = params.outerCircle5.globalRotation.toFixed(3);
         draw();
     });
-    
+    document.getElementById('outer5WaveHeight').addEventListener('input', (e) => {
+        params.outerCircle5.waveHeight = parseFloat(e.target.value);
+        document.getElementById('outer5WaveHeightValue').textContent = params.outerCircle5.waveHeight.toFixed(1) + 'x';
+        draw();
+    });
+
     // Outer circle 6 controls
     const outer6Controls = document.getElementById('outerCircle6Controls');
     outer6Controls.innerHTML = `
@@ -222,10 +292,10 @@ function createControlPanel() {
             <label>每段长度 (变化比例):</label>
             <input type="range" id="outer6Segment" min="0" max="0.2" step="0.01" value="${params.outerCircle6.segmentLength}">
             <span class="value-display" id="outer6SegmentValue">${(() => {
-                const initialUnit = 1.0 / params.outerCircle6.segmentCount;
-                const actualLength = initialUnit * (1 + params.outerCircle6.segmentLength);
-                return (params.outerCircle6.segmentLength * 100).toFixed(1) + '% (实际: ' + (actualLength * 100).toFixed(1) + '%)';
-            })()}</span>
+            const initialUnit = 1.0 / params.outerCircle6.segmentCount;
+            const actualLength = initialUnit * (1 + params.outerCircle6.segmentLength);
+            return (params.outerCircle6.segmentLength * 100).toFixed(1) + '% (实际: ' + (actualLength * 100).toFixed(1) + '%)';
+        })()}</span>
         </div>
         <div class="control-group">
             <label>自旋角 (弧度):</label>
@@ -237,8 +307,13 @@ function createControlPanel() {
             <input type="range" id="outer6GlobalRot" min="0" max="6.28" step="0.01" value="${params.outerCircle6.globalRotation}">
             <span class="value-display" id="outer6GlobalRotValue">${params.outerCircle6.globalRotation.toFixed(3)}</span>
         </div>
+        <div class="control-group">
+            <label>声波高度:</label>
+            <input type="range" id="outer6WaveHeight" min="0.5" max="2.0" step="0.1" value="${params.outerCircle6.waveHeight || 1.0}">
+            <span class="value-display" id="outer6WaveHeightValue">${(params.outerCircle6.waveHeight || 1.0).toFixed(1)}x</span>
+        </div>
     `;
-    
+
     document.getElementById('outer6Radius').addEventListener('input', (e) => {
         params.outerCircle6.radius = parseFloat(e.target.value);
         document.getElementById('outer6RadiusValue').textContent = (params.outerCircle6.radius * 100).toFixed(1) + '%';
@@ -270,19 +345,48 @@ function createControlPanel() {
         document.getElementById('outer6GlobalRotValue').textContent = params.outerCircle6.globalRotation.toFixed(3);
         draw();
     });
+    document.getElementById('outer6WaveHeight').addEventListener('input', (e) => {
+        params.outerCircle6.waveHeight = parseFloat(e.target.value);
+        document.getElementById('outer6WaveHeightValue').textContent = params.outerCircle6.waveHeight.toFixed(1) + 'x';
+        draw();
+    });
 }
 
 // Setup randomize button
 function setupRandomizeButton() {
-    const button = document.getElementById('randomizeButton');
-    button.addEventListener('click', randomizeInnerCircles);
+    const btn = document.getElementById('randomizeButton');
+    if (btn) {
+        btn.addEventListener('click', () => {
+            initializeColors(); // Regenerate rainbow colors
+            randomizeInnerCircles();
+            randomizeOuterCircles();
+            draw();
+        });
+    }
+
+    // Setup keyboard shortcuts
+    setupShortcuts();
 }
 
-// Randomize inner circles with tangent constraint
+// Setup keyboard shortcuts
+function setupShortcuts() {
+    document.addEventListener('keydown', (e) => {
+        // Number keys 1-6 for styles
+        if (e.key >= '1' && e.key <= '6') {
+            const select = document.getElementById('voiceprintStyle');
+            if (select && select.options.length >= parseInt(e.key)) {
+                select.selectedIndex = parseInt(e.key) - 1;
+                // Trigger change event manually
+                const event = new Event('change');
+                select.dispatchEvent(event);
+            }
+        }
+    });
+}
 // First randomize sizes (±20% from initial values), then calculate positions
 function randomizeInnerCircles() {
     const maxRadius = config.maxRadius * 0.5;
-    
+
     // Step 1: Randomize circle sizes first
     // Circle 4: ±10%, Circles 1-3: ±15%
     params.innerCircles.forEach((circle, index) => {
@@ -294,13 +398,13 @@ function randomizeInnerCircles() {
         // Clamp to reasonable bounds (5% to 50% of maxRadius)
         params.innerCircles[index].radius = Math.max(0.05, Math.min(0.5, newRadius));
     });
-    
+
     // Step 2: Calculate positions based on new radii
     // Circle 4: Fixed at center, radius is now randomized
     const r4 = maxRadius * params.innerCircles[3].radius;
     params.innerCircles[3].offsetX = 0;
     params.innerCircles[3].offsetY = 0;
-    
+
     // Circle 3: Rolls inside Circle 4, tangent to Circle 4
     // Distance from center = r4 - r3
     const r3 = maxRadius * params.innerCircles[2].radius;
@@ -310,7 +414,7 @@ function randomizeInnerCircles() {
     const angle3 = Math.random() * Math.PI * 2;
     params.innerCircles[2].offsetX = (dist3 * Math.cos(angle3)) / maxRadius;
     params.innerCircles[2].offsetY = (dist3 * Math.sin(angle3)) / maxRadius;
-    
+
     // Circle 2: Rolls inside Circle 3, tangent to Circle 3
     // Distance from Circle 3's center = r3 - r2
     const r2 = maxRadius * params.innerCircles[1].radius;
@@ -323,7 +427,7 @@ function randomizeInnerCircles() {
     // Circle 2's center relative to Circle 3's center
     params.innerCircles[1].offsetX = (c3X + dist2 * Math.cos(angle2)) / maxRadius;
     params.innerCircles[1].offsetY = (c3Y + dist2 * Math.sin(angle2)) / maxRadius;
-    
+
     // Circle 1: Rolls inside Circle 2, tangent to Circle 2
     // Distance from Circle 2's center = r2 - r1
     const r1 = maxRadius * params.innerCircles[0].radius;
@@ -336,13 +440,13 @@ function randomizeInnerCircles() {
     // Circle 1's center relative to Circle 2's center
     params.innerCircles[0].offsetX = (c2X + dist1 * Math.cos(angle1)) / maxRadius;
     params.innerCircles[0].offsetY = (c2Y + dist1 * Math.sin(angle1)) / maxRadius;
-    
+
     // Update UI sliders to reflect new values
     params.innerCircles.forEach((circle, index) => {
         const rSlider = document.getElementById(`innerR${index}`);
         const xSlider = document.getElementById(`innerX${index}`);
         const ySlider = document.getElementById(`innerY${index}`);
-        
+
         if (rSlider) {
             rSlider.value = circle.radius;
             document.getElementById(`innerR${index}Value`).textContent = (circle.radius * 100).toFixed(1) + '%';
@@ -356,10 +460,10 @@ function randomizeInnerCircles() {
             document.getElementById(`innerY${index}Value`).textContent = (circle.offsetY * 100).toFixed(2) + '%';
         }
     });
-    
+
     // Step 3: Randomize outer circles (5 and 6)
     randomizeOuterCircles();
-    
+
     // Redraw
     draw();
 }
@@ -370,11 +474,11 @@ function randomizeOuterCircles() {
     // Circle 5: random between 3-5
     const segmentCount5 = 3 + Math.floor(Math.random() * 3); // 3, 4, or 5
     params.outerCircle5.segmentCount = segmentCount5;
-    
+
     // Circle 6: random between a (Circle 5's count) to 6
     const segmentCount6 = segmentCount5 + Math.floor(Math.random() * (7 - segmentCount5)); // a to 6 (inclusive)
     params.outerCircle6.segmentCount = segmentCount6;
-    
+
     // Step 2: Randomize Circle 5 parameters
     // 1. Segment length variation: 4% to 10%
     params.outerCircle5.segmentLength = 0.04 + Math.random() * 0.06; // 0.04 to 0.10
@@ -382,7 +486,7 @@ function randomizeOuterCircles() {
     params.outerCircle5.selfRotation = 0.1 + Math.random() * 0.03; // 0.1 to 0.13
     // 3. Global rotation: 0 to 2π (any angle)
     params.outerCircle5.globalRotation = Math.random() * Math.PI * 2;
-    
+
     // Step 3: Randomize Circle 6 parameters
     // 1. Segment length variation: 4% to 10%
     params.outerCircle6.segmentLength = 0.04 + Math.random() * 0.06; // 0.04 to 0.10
@@ -390,13 +494,13 @@ function randomizeOuterCircles() {
     params.outerCircle6.selfRotation = 0.1 + Math.random() * 0.03; // 0.1 to 0.13
     // 3. Global rotation: 0 to 2π (any angle)
     params.outerCircle6.globalRotation = Math.random() * Math.PI * 2;
-    
+
     // Update UI sliders for Circle 5
     const outer5SegmentCount = document.getElementById('outer5SegmentCount');
     const outer5Segment = document.getElementById('outer5Segment');
     const outer5SelfRot = document.getElementById('outer5SelfRot');
     const outer5GlobalRot = document.getElementById('outer5GlobalRot');
-    
+
     if (outer5SegmentCount) {
         outer5SegmentCount.value = params.outerCircle5.segmentCount;
         document.getElementById('outer5SegmentCountValue').textContent = params.outerCircle5.segmentCount;
@@ -415,13 +519,13 @@ function randomizeOuterCircles() {
         outer5GlobalRot.value = params.outerCircle5.globalRotation;
         document.getElementById('outer5GlobalRotValue').textContent = params.outerCircle5.globalRotation.toFixed(3);
     }
-    
+
     // Update UI sliders for Circle 6
     const outer6SegmentCount = document.getElementById('outer6SegmentCount');
     const outer6Segment = document.getElementById('outer6Segment');
     const outer6SelfRot = document.getElementById('outer6SelfRot');
     const outer6GlobalRot = document.getElementById('outer6GlobalRot');
-    
+
     if (outer6SegmentCount) {
         outer6SegmentCount.value = params.outerCircle6.segmentCount;
         document.getElementById('outer6SegmentCountValue').textContent = params.outerCircle6.segmentCount;
@@ -446,19 +550,19 @@ function randomizeOuterCircles() {
 function calculateFourCircles() {
     const maxRadius = config.maxRadius * 0.5;
     const circles = [];
-    
+
     params.innerCircles.forEach((circleParams, index) => {
         const radius = maxRadius * circleParams.radius;
         const offsetX = maxRadius * circleParams.offsetX;
         const offsetY = maxRadius * circleParams.offsetY;
-        
+
         circles.push({
             cx: config.centerX + offsetX,
             cy: config.centerY + offsetY,
             radius: radius
         });
     });
-    
+
     return circles;
 }
 
@@ -467,51 +571,49 @@ function drawCircleOutline(cx, cy, radius, color = 'white') {
     ctx.strokeStyle = color;
     ctx.lineWidth = 1;
     ctx.beginPath();
-    
+
     const segments = 120;
     for (let i = 0; i <= segments; i++) {
         const angle = (i / segments) * Math.PI * 2;
         const x = cx + Math.cos(angle) * radius;
         const y = cy + Math.sin(angle) * radius;
-        
+
         if (i === 0) {
             ctx.moveTo(x, y);
         } else {
             ctx.lineTo(x, y);
         }
     }
-    
+
     ctx.stroke();
 }
 
-// Draw segmented circle with parameters
-function drawSegmentedCircle(circleIndex, circleParams) {
-    const numSegments = circleParams.segmentCount; // Use dynamic segment count
+// Draw segmented circle (for circles 5 and 6)
+function drawSegmentedCircle(circleNumber, circleParams) {
+    const numSegments = circleParams.segmentCount;
     const baseRadius = config.maxRadius * circleParams.radius;
-    
-    // Calculate actual segment length based on variation ratio
-    // Initial unit = 100% / segmentCount (e.g., 4 segments = 25%, 5 segments = 20%)
-    const initialUnit = 1.0 / numSegments; // As a ratio (0.25 for 4 segments, 0.2 for 5 segments)
-    // Actual segment length = initial unit * (1 + variation ratio)
-    // segmentLength is now a variation ratio (0-0.2, i.e., 0-20%)
+
+    // Calculate segment geometry
+    const initialUnit = 1.0 / numSegments;
     const actualSegmentLength = initialUnit * (1 + circleParams.segmentLength);
-    const segmentAngleSize = actualSegmentLength * Math.PI * 2; // Convert to radians
-    const gapSize = (Math.PI * 2 - segmentAngleSize * numSegments) / numSegments; // Calculate gap
-    
-    ctx.strokeStyle = circleIndex === 5 ? 'cyan' : 'yellow';
-    ctx.lineWidth = 2;
-    
-    // Start from global rotation angle
+    const segmentAngleSize = actualSegmentLength * Math.PI * 2;
+    const gapSize = (Math.PI * 2 - segmentAngleSize * numSegments) / numSegments;
+
     let currentAngle = circleParams.globalRotation;
-    
+
     for (let i = 0; i < numSegments; i++) {
+        // Get color for this segment
+        const segmentColor = circleParams.segmentColors[i] || 'white';
+        ctx.strokeStyle = segmentColor;
+        ctx.lineWidth = 2;
+
         // Calculate segment midpoint angle (the center point of this arc on the circle)
         const segmentMidAngle = currentAngle + segmentAngleSize * 0.5;
-        
+
         // Calculate the center point of the arc on the circle (this is the rotation center for self-rotation)
         const centerX = config.centerX + Math.cos(segmentMidAngle) * baseRadius;
         const centerY = config.centerY + Math.sin(segmentMidAngle) * baseRadius;
-        
+
         // Draw this segment as an independent arc
         ctx.beginPath();
         const segments = 60;
@@ -519,26 +621,26 @@ function drawSegmentedCircle(circleIndex, circleParams) {
             const t = j / segments;
             // Original angle of the point on the circle
             const originalAngle = currentAngle + t * segmentAngleSize;
-            
+
             // Original point on the circle
             const originalX = config.centerX + Math.cos(originalAngle) * baseRadius;
             const originalY = config.centerY + Math.sin(originalAngle) * baseRadius;
-            
+
             // Apply self-rotation: rotate around the arc's center point (not the circle center)
             // Translate to center point, rotate, then translate back
             const dx = originalX - centerX;
             const dy = originalY - centerY;
-            
+
             // Apply rotation matrix around the arc center point
             const cosRot = Math.cos(circleParams.selfRotation);
             const sinRot = Math.sin(circleParams.selfRotation);
             const rotatedX = dx * cosRot - dy * sinRot;
             const rotatedY = dx * sinRot + dy * cosRot;
-            
+
             // Translate back
             const x = centerX + rotatedX;
             const y = centerY + rotatedY;
-            
+
             if (j === 0) {
                 ctx.moveTo(x, y);
             } else {
@@ -546,158 +648,395 @@ function drawSegmentedCircle(circleIndex, circleParams) {
             }
         }
         ctx.stroke();
-        
+
         // Move to next segment position (with gap)
         currentAngle += segmentAngleSize + gapSize;
     }
+}
+
+// Draw raw waveforms on the left side for debugging
+function drawRawWaveforms() {
+    if (!voiceprintSettings.showRawWaveforms || voiceprintData.rings.length === 0) return;
+
+    const leftMargin = 20;
+    const waveformWidth = width * 0.12; // 12% of canvas width
+    const waveformHeight = 40;
+    const waveformGap = 15;
+    const startY = 50;
+
+    ctx.save();
+    ctx.font = '11px Arial';
+
+    voiceprintData.rings.forEach((ring, ringIndex) => {
+        const y = startY + ringIndex * (waveformHeight + waveformGap);
+
+        // Get color for this ring
+        let baseColor;
+        if (ringIndex < 4) {
+            baseColor = params.innerCircles[ringIndex].color;
+        } else if (ringIndex === 4) {
+            const colors = params.outerCircle5.segmentColors;
+            baseColor = colors[0] || '#fff';
+        } else {
+            const colors = params.outerCircle6.segmentColors;
+            baseColor = colors[0] || '#fff';
+        }
+
+        // Draw label
+        ctx.fillStyle = baseColor;
+        ctx.fillText(`圈${ringIndex + 1}`, leftMargin, y - 5);
+
+        // Draw waveform background
+        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(leftMargin, y, waveformWidth, waveformHeight);
+
+        // Draw center line
+        ctx.beginPath();
+        ctx.moveTo(leftMargin, y + waveformHeight / 2);
+        ctx.lineTo(leftMargin + waveformWidth, y + waveformHeight / 2);
+        ctx.stroke();
+
+        // Draw spectrum bars
+        if (ring.samples && ring.samples.length > 0) {
+            // Use each ring's independent sampleIndex
+            const maxSamples = ring.sampleIndex || 0;
+
+            if (maxSamples > 0) {
+                // 计算基础高度和用户声音高度的占比
+                const baseHeightRatio = voiceprintSettings.baseHeightRatio;
+                const voiceHeightRatio = 1.0 - baseHeightRatio;
+                const baseHeight = waveformHeight * 0.1 * baseHeightRatio; // 基础高度
+                const voiceHeight = waveformHeight * 0.8 * voiceHeightRatio; // 用户声音高度
+                
+                // 获取当前圆圈的声波高度缩放因子
+                let waveHeightScale = 1.0;
+                if (ringIndex < 4) {
+                    waveHeightScale = params.innerCircles[ringIndex].waveHeight || 1.0;
+                } else if (ringIndex === 4) {
+                    waveHeightScale = params.outerCircle5.waveHeight || 1.0;
+                } else {
+                    waveHeightScale = params.outerCircle6.waveHeight || 1.0;
+                }
+
+                // Draw bars for ALL recorded samples (no step/skip)
+                for (let i = 0; i < maxSamples; i++) {
+                    const amplitude = ring.samples[i] || 0;
+
+                    const barX = leftMargin + (i / ring.sampleCount) * waveformWidth;
+                    // Fixed width for high density
+                    const barWidth = Math.max(1, waveformWidth / ring.sampleCount);
+                    const barHeight = (baseHeight + amplitude * voiceHeight) * waveHeightScale;
+
+                    // Draw bar from center line
+                    const barY = y + waveformHeight / 2 - barHeight / 2;
+
+                    // Create gradient for bar
+                    const gradient = ctx.createLinearGradient(barX, barY + barHeight, barX, barY);
+                    gradient.addColorStop(0, getGradientColor(baseColor, 0)); // Dark at bottom
+                    gradient.addColorStop(1, getGradientColor(baseColor, amplitude)); // Light at top
+
+                    ctx.fillStyle = gradient;
+                    ctx.fillRect(barX, barY, barWidth, barHeight);
+                }
+            }
+        }
+    });
+
+    ctx.restore();
 }
 
 function draw() {
     // Clear canvas
     ctx.fillStyle = 'black';
     ctx.fillRect(0, 0, width, height);
-    
+
     // Draw base layer (circles and segments)
     if (layerVisibility.showBaseLayer) {
-        // Draw the 4 nested circles
+        // Draw the 4 nested circles with rainbow colors
         const fourCircles = calculateFourCircles();
-        const colors = ['magenta', 'white', 'cyan', 'green'];
         fourCircles.forEach((circle, index) => {
-            drawCircleOutline(circle.cx, circle.cy, circle.radius, colors[index] || 'white');
+            const color = params.innerCircles[index].color || 'white';
+            drawCircleOutline(circle.cx, circle.cy, circle.radius, color);
         });
-        
+
         // Draw outer segmented circles
         drawSegmentedCircle(5, params.outerCircle5);
         drawSegmentedCircle(6, params.outerCircle6);
-        
+
         // Draw center point for reference
         ctx.fillStyle = 'red';
         ctx.beginPath();
         ctx.arc(config.centerX, config.centerY, 3, 0, Math.PI * 2);
         ctx.fill();
     }
-    
-    // Draw voiceprint layer (on top)
+
+    // Draw voiceprint layer
     if (layerVisibility.showVoiceprintLayer) {
         drawVoiceprint();
     }
+
+    // Raw waveforms removed - no longer one-to-one mapping with rings
 }
 
 // Setup recording controls
 function setupRecordingControls() {
+    const permissionBtn = document.getElementById('requestPermission');
     const startBtn = document.getElementById('startRecording');
-    const stopBtn = document.getElementById('stopRecording');
-    const showBaseCheckbox = document.getElementById('showBaseLayer');
-    const showVoiceprintCheckbox = document.getElementById('showVoiceprintLayer');
+    const simulateBtn = document.getElementById('simulateInput');
     const styleSelect = document.getElementById('voiceprintStyle');
-    const volumeThreshold = document.getElementById('volumeThreshold');
-    
-    startBtn.addEventListener('click', startRecording);
-    stopBtn.addEventListener('click', stopRecording);
-    
-    showBaseCheckbox.addEventListener('change', (e) => {
-        layerVisibility.showBaseLayer = e.target.checked;
-        draw();
-    });
-    
-    showVoiceprintCheckbox.addEventListener('change', (e) => {
-        layerVisibility.showVoiceprintLayer = e.target.checked;
-        draw();
-    });
-    
-    styleSelect.addEventListener('change', (e) => {
-        voiceprintSettings.style = e.target.value;
-        draw();
-    });
-    
-    volumeThreshold.addEventListener('input', (e) => {
-        voiceprintSettings.volumeThreshold = parseFloat(e.target.value) / 100;
-        document.getElementById('volumeThresholdValue').textContent = e.target.value;
-    });
+
+    // Permission request button
+    if (permissionBtn) {
+        permissionBtn.addEventListener('click', requestMicrophonePermission);
+    }
+
+    // Press and hold recording
+    if (startBtn) {
+        startBtn.addEventListener('mousedown', () => {
+            if (!isRecording && !isSimulating && micPermissionGranted) {
+                startRecording();
+            }
+        });
+
+        startBtn.addEventListener('mouseup', () => {
+            if (isRecording) {
+                stopRecording();
+            }
+        });
+
+        // Also stop if mouse leaves the button while pressed
+        startBtn.addEventListener('mouseleave', () => {
+            if (isRecording) {
+                stopRecording();
+            }
+        });
+
+        // Touch support
+        startBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (!isRecording && !isSimulating && micPermissionGranted) {
+                startRecording();
+            }
+        });
+
+        startBtn.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (isRecording) {
+                stopRecording();
+            }
+        });
+    }
+
+    if (simulateBtn) {
+        simulateBtn.addEventListener('click', () => {
+            if (isRecording || isSimulating) {
+                stopRecording();
+            } else {
+                startSimulation();
+            }
+        });
+    }
+
+    if (styleSelect) {
+        styleSelect.addEventListener('change', (e) => {
+            voiceprintSettings.style = e.target.value;
+            draw();
+        });
+    }
+
+    // Base height ratio control
+    const baseHeightRatioSlider = document.getElementById('baseHeightRatio');
+    const baseHeightRatioValue = document.getElementById('baseHeightRatioValue');
+    if (baseHeightRatioSlider && baseHeightRatioValue) {
+        baseHeightRatioSlider.addEventListener('input', (e) => {
+            voiceprintSettings.baseHeightRatio = parseFloat(e.target.value);
+            baseHeightRatioValue.textContent = (voiceprintSettings.baseHeightRatio * 100).toFixed(0) + '%';
+            draw();
+        });
+    }
+
+    // Layer visibility controls
+    const baseCheck = document.getElementById('showBaseLayer');
+    const voiceCheck = document.getElementById('showVoiceprintLayer');
+    const rawWaveCheck = document.getElementById('showRawWaveforms');
+
+    if (baseCheck) {
+        baseCheck.addEventListener('change', (e) => {
+            layerVisibility.showBaseLayer = e.target.checked;
+            draw();
+        });
+    }
+
+    if (voiceCheck) {
+        voiceCheck.addEventListener('change', (e) => {
+            layerVisibility.showVoiceprintLayer = e.target.checked;
+            draw();
+        });
+    }
+
+    if (rawWaveCheck) {
+        rawWaveCheck.addEventListener('change', (e) => {
+            voiceprintSettings.showRawWaveforms = e.target.checked;
+            draw();
+        });
+    }
+}
+
+// Request microphone permission
+async function requestMicrophonePermission() {
+    const permissionBtn = document.getElementById('requestPermission');
+    const startBtn = document.getElementById('startRecording');
+
+    try {
+        // Request microphone access
+        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        // Create audio context
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        // 增加 fftSize 以提高频率分辨率，更好地捕获高频信号
+        // 1024 提供 512 个频率bin，频率分辨率约为 43Hz (44100/1024)
+        analyser.fftSize = 1024;
+        analyser.smoothingTimeConstant = 0.3; // 降低平滑度，提高响应速度
+        const bufferLength = analyser.frequencyBinCount;
+        dataArray = new Uint8Array(bufferLength);
+
+        // Connect microphone
+        microphone = audioContext.createMediaStreamSource(mediaStream);
+        microphone.connect(analyser);
+
+        // Initialize rings if empty
+        if (voiceprintData.rings.length === 0) {
+            initializeVoiceprintRings();
+        }
+
+        micPermissionGranted = true;
+
+        // Update UI
+        if (permissionBtn) {
+            permissionBtn.disabled = true;
+            permissionBtn.textContent = '✓ 麦克风已就绪';
+            permissionBtn.style.background = 'linear-gradient(135deg, #00c896 0%, #00a878 100%)';
+        }
+        if (startBtn) {
+            startBtn.disabled = false;
+        }
+
+        console.log('Microphone permission granted');
+    } catch (err) {
+        console.error('Failed to access microphone:', err);
+        alert('无法访问麦克风。请确保已授权麦克风权限。');
+    }
 }
 
 // Start recording
-async function startRecording() {
-    try {
-        // Request microphone access
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        
-        // Initialize audio context
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        analyser = audioContext.createAnalyser();
-        analyser.fftSize = 256; // Frequency resolution
-        analyser.smoothingTimeConstant = 0.8;
-        
-        microphone = audioContext.createMediaStreamSource(stream);
-        microphone.connect(analyser);
-        
-        dataArray = new Uint8Array(analyser.frequencyBinCount);
-        
-        // Initialize voiceprint data
-        voiceprintData.rings = [];
-        voiceprintData.currentRingIndex = 0;
-        voiceprintData.sampleIndex = 0;
-        
-        // Initialize rings based on current configuration
-        initializeVoiceprintRings();
-        
-        isRecording = true;
-        document.getElementById('startRecording').disabled = true;
-        document.getElementById('stopRecording').disabled = false;
-        
-        // Start recording loop
-        recordAudioData();
-        
-        console.log('Recording started');
-    } catch (error) {
-        console.error('Error accessing microphone:', error);
-        alert('无法访问麦克风，请检查权限设置');
+function startRecording() {
+    if (isRecording || isSimulating || !micPermissionGranted) return;
+
+    isRecording = true;
+    const simulateBtn = document.getElementById('simulateInput');
+    if (simulateBtn) simulateBtn.disabled = true;
+
+    // Start recording loop
+    recordAudioData();
+
+    console.log('Recording started (press and hold)');
+}
+
+// Start simulation
+function startSimulation() {
+    if (isRecording || isSimulating) return;
+
+    // Initialize if needed
+    if (!dataArray) {
+        // Create dummy data array if audio context not started
+        // 匹配新的 fftSize = 1024 (512 bins)
+        dataArray = new Uint8Array(512);
     }
+
+    isSimulating = true;
+
+    // Update UI
+    const startBtn = document.getElementById('startRecording');
+    const simulateBtn = document.getElementById('simulateInput');
+
+    if (startBtn) startBtn.disabled = true;
+    if (simulateBtn) {
+        simulateBtn.textContent = "停止模拟";
+        simulateBtn.style.background = "linear-gradient(135deg, #ff9966 0%, #ff5e62 100%)";
+    }
+
+    // Initialize rings if empty
+    if (voiceprintData.rings.length === 0) {
+        initializeVoiceprintRings();
+    }
+
+    // Reset recording state for overlapping recording
+    voiceprintData.globalSampleIndex = 0;
+    voiceprintData.rings.forEach(ring => {
+        ring.sampleIndex = 0;
+    });
+
+    // Start loop
+    recordAudioData();
 }
 
 // Stop recording
 function stopRecording() {
-    isRecording = false;
-    
-    if (microphone) {
-        microphone.disconnect();
-        microphone = null;
+    if (isRecording) {
+        isRecording = false;
+        // Don't close the audio context or disconnect mic - keep them ready for next recording
+        console.log('Recording stopped');
     }
-    
-    if (audioContext) {
-        audioContext.close();
-        audioContext = null;
+
+    if (isSimulating) {
+        isSimulating = false;
+        console.log('Simulation stopped');
     }
-    
+
     if (animationFrameId) {
         cancelAnimationFrame(animationFrameId);
         animationFrameId = null;
     }
-    
-    document.getElementById('startRecording').disabled = false;
-    document.getElementById('stopRecording').disabled = true;
-    
-    console.log('Recording stopped');
+
+    // Update UI
+    const simulateBtn = document.getElementById('simulateInput');
+    if (simulateBtn) {
+        simulateBtn.textContent = "模拟输入";
+        simulateBtn.style.background = "linear-gradient(135deg, #00c6ff 0%, #0072ff 100%)";
+        simulateBtn.disabled = false;
+    }
 }
 
 // Initialize voiceprint rings based on current circle configuration
 function initializeVoiceprintRings() {
     const maxRadius = config.maxRadius * 0.5;
     const fourCircles = calculateFourCircles();
-    
+
     // Add rings for inner 4 circles (standard circles)
+    // 增加样本数到3倍（180 -> 540），让柱状图更细更密集
+    const firstRingSampleCount = 540; // Number of samples for first ring
     fourCircles.forEach((circle, index) => {
-        const samplesPerRing = 180; // Number of samples per ring
+        const samplesPerRing = 540; // Number of samples per ring
+        // Calculate start global index: each ring starts at 25% of previous ring
+        // Ring 0: starts at 0
+        // Ring 1: starts at ring0.sampleCount * 0.25
+        // Ring 2: starts at ring0.sampleCount * 0.5
+        // Ring 3: starts at ring0.sampleCount * 0.75
+        const startGlobalIndex = Math.floor(firstRingSampleCount * index * 0.25);
         voiceprintData.rings.push({
             type: 'circle', // Standard circle
             radius: circle.radius,
             centerX: circle.cx,
             centerY: circle.cy,
             samples: new Array(samplesPerRing).fill(0),
-            sampleCount: samplesPerRing
+            sampleCount: samplesPerRing,
+            sampleIndex: 0, // Independent sample index for this ring
+            startGlobalIndex: startGlobalIndex // Global index when this ring starts recording
         });
     });
-    
+
     // Add rings for outer circles (segmented paths)
     // Circle 5 - segmented path
     const r5 = config.maxRadius * params.outerCircle5.radius;
@@ -706,7 +1045,10 @@ function initializeVoiceprintRings() {
     const actualSegmentLength5 = initialUnit5 * (1 + params.outerCircle5.segmentLength);
     const segmentAngleSize5 = actualSegmentLength5 * Math.PI * 2;
     const gapSize5 = (Math.PI * 2 - segmentAngleSize5 * segmentCount5) / segmentCount5;
-    
+
+    // Circle 4 (index 3) starts at firstRingSampleCount * 0.75
+    // Circle 5 (index 4) starts at firstRingSampleCount * 1.0 (or at 25% of circle 4)
+    const startGlobalIndex5 = Math.floor(firstRingSampleCount * 4 * 0.25);
     voiceprintData.rings.push({
         type: 'segmented', // Segmented circle
         baseRadius: r5,
@@ -717,10 +1059,12 @@ function initializeVoiceprintRings() {
         gapSize: gapSize5,
         globalRotation: params.outerCircle5.globalRotation,
         selfRotation: params.outerCircle5.selfRotation,
-        samples: new Array(240).fill(0),
-        sampleCount: 240
+        samples: new Array(720).fill(0),
+        sampleCount: 720,
+        sampleIndex: 0, // Independent sample index for this ring
+        startGlobalIndex: startGlobalIndex5 // Global index when this ring starts recording
     });
-    
+
     // Circle 6 - segmented path
     const r6 = config.maxRadius * params.outerCircle6.radius;
     const segmentCount6 = params.outerCircle6.segmentCount;
@@ -728,7 +1072,9 @@ function initializeVoiceprintRings() {
     const actualSegmentLength6 = initialUnit6 * (1 + params.outerCircle6.segmentLength);
     const segmentAngleSize6 = actualSegmentLength6 * Math.PI * 2;
     const gapSize6 = (Math.PI * 2 - segmentAngleSize6 * segmentCount6) / segmentCount6;
-    
+
+    // Circle 6 (index 5) starts at firstRingSampleCount * 1.25 (or at 25% of circle 5)
+    const startGlobalIndex6 = Math.floor(firstRingSampleCount * 5 * 0.25);
     voiceprintData.rings.push({
         type: 'segmented', // Segmented circle
         baseRadius: r6,
@@ -739,79 +1085,173 @@ function initializeVoiceprintRings() {
         gapSize: gapSize6,
         globalRotation: params.outerCircle6.globalRotation,
         selfRotation: params.outerCircle6.selfRotation,
-        samples: new Array(240).fill(0),
-        sampleCount: 240
+        samples: new Array(720).fill(0),
+        sampleCount: 720,
+        sampleIndex: 0, // Independent sample index for this ring
+        startGlobalIndex: startGlobalIndex6 // Global index when this ring starts recording
     });
 }
 
 // Record audio data and map to rings
 function recordAudioData() {
-    if (!isRecording) return;
-    
-    analyser.getByteFrequencyData(dataArray);
-    
-    // Calculate average amplitude
-    let sum = 0;
-    for (let i = 0; i < dataArray.length; i++) {
-        sum += dataArray[i];
-    }
-    const averageAmplitude = sum / dataArray.length;
-    const normalizedAmplitude = averageAmplitude / 255; // Normalize to 0-1
-    
-    // Check volume threshold - pause if too low
-    if (normalizedAmplitude < voiceprintSettings.volumeThreshold) {
-        voiceprintSettings.isPaused = true;
-    } else {
-        voiceprintSettings.isPaused = false;
-        
-        // Record to current ring only when not paused
-        if (voiceprintData.currentRingIndex < voiceprintData.rings.length) {
-            const currentRing = voiceprintData.rings[voiceprintData.currentRingIndex];
-            
-            if (voiceprintData.sampleIndex < currentRing.sampleCount) {
-                currentRing.samples[voiceprintData.sampleIndex] = normalizedAmplitude;
-                voiceprintData.sampleIndex++;
-            } else {
-                // Move to next ring
-                voiceprintData.currentRingIndex++;
-                voiceprintData.sampleIndex = 0;
-            }
+    if (!isRecording && !isSimulating) return;
+
+    if (isRecording) {
+        analyser.getByteFrequencyData(dataArray);
+    } else if (isSimulating) {
+        // Generate fake data
+        const time = Date.now() / 1000;
+        for (let i = 0; i < dataArray.length; i++) {
+            // Mix of sine waves and noise
+            const val = (Math.sin(time * 5 + i * 0.1) + 1) * 60 +
+                (Math.sin(time * 10 + i * 0.5) + 1) * 40 +
+                Math.random() * 30;
+            dataArray[i] = Math.min(255, val);
         }
     }
+
+    // 计算加权振幅，增强高频响应
+    // 人声频率分布：
+    // - 低频 (0-1000Hz): 元音，能量大
+    // - 中频 (1000-4000Hz): 部分辅音
+    // - 高频 (4000-22050Hz): 清音、辅音，能量小但重要
+    // 使用加权平均，给高频更高的权重，避免被低频淹没
     
+    const sampleRate = audioContext ? audioContext.sampleRate : 44100;
+    const nyquist = sampleRate / 2; // 奈奎斯特频率
+    const binWidth = nyquist / dataArray.length; // 每个bin的频率宽度
+    
+    let weightedSum = 0;
+    let weightSum = 0;
+    
+    for (let i = 0; i < dataArray.length; i++) {
+        const frequency = i * binWidth; // 当前bin对应的频率
+        const amplitude = dataArray[i] / 255; // 归一化到 0-1
+        
+        // 计算权重：频率越高，权重越大（指数增长）
+        // 低频(0-1000Hz): 权重 1.0
+        // 中频(1000-4000Hz): 权重 1.0-2.5
+        // 高频(4000Hz+): 权重 2.5-5.0
+        let weight = 1.0;
+        if (frequency > 1000) {
+            // 中频：线性增长
+            weight = 1.0 + (frequency - 1000) / 3000 * 1.5;
+        }
+        if (frequency > 4000) {
+            // 高频：继续增长
+            weight = 2.5 + (frequency - 4000) / (nyquist - 4000) * 2.5;
+        }
+        
+        // 使用 RMS (均方根) 而不是简单平均，更好地反映能量
+        weightedSum += amplitude * amplitude * weight;
+        weightSum += weight;
+    }
+    
+    // RMS 计算：sqrt(加权平均)
+    const rmsAmplitude = Math.sqrt(weightedSum / weightSum);
+    const normalizedAmplitude = Math.min(1.0, rmsAmplitude * 1.5); // 稍微放大，增强响应
+
+    // 重叠录制逻辑：同时向所有应该录制的圈写入数据
+    // 每个圈从前一圈的25%时开始，但都画完整的100%
+    // 为了加快录制速度，每帧录制2个样本（速度快一倍）
+    const samplesPerFrame = 2; // 每帧录制的样本数（2倍速度）
+    
+    for (let i = 0; i < samplesPerFrame; i++) {
+        voiceprintData.rings.forEach((ring, ringIndex) => {
+            // 检查当前全局索引是否达到该圈的起始索引
+            if (voiceprintData.globalSampleIndex >= ring.startGlobalIndex) {
+                // 检查该圈是否已经录制完成
+                if (ring.sampleIndex < ring.sampleCount) {
+                    // 将当前音频数据写入该圈
+                    ring.samples[ring.sampleIndex] = normalizedAmplitude;
+                    ring.sampleIndex++;
+                }
+            }
+        });
+
+        // 增加全局样本索引
+        voiceprintData.globalSampleIndex++;
+    }
+
+    // 检查是否所有圈都录制完成
+    // 需要检查所有圈是否都完成了，而不是只检查第一圈
+    let allRingsComplete = true;
+    for (let i = 0; i < voiceprintData.rings.length; i++) {
+        const ring = voiceprintData.rings[i];
+        // 如果该圈已经开始录制（globalSampleIndex >= startGlobalIndex），但还没完成
+        if (voiceprintData.globalSampleIndex >= ring.startGlobalIndex) {
+            if (ring.sampleIndex < ring.sampleCount) {
+                allRingsComplete = false;
+                break;
+            }
+        } else {
+            // 如果该圈还没开始录制，说明还没完成
+            allRingsComplete = false;
+            break;
+        }
+    }
+
     // Redraw
     draw();
-    
-    // Continue recording
-    animationFrameId = requestAnimationFrame(recordAudioData);
+
+    // Continue recording if not all rings are complete and user is still holding the button
+    if (!allRingsComplete && (isRecording || isSimulating)) {
+        animationFrameId = requestAnimationFrame(recordAudioData);
+    } else if (allRingsComplete) {
+        // All rings complete, stop recording
+        if (isRecording) {
+            isRecording = false;
+        }
+        if (isSimulating) {
+            isSimulating = false;
+        }
+    }
 }
 
 // Draw voiceprint on canvas with different styles
 function drawVoiceprint() {
     if (voiceprintData.rings.length === 0) return;
-    
+
     voiceprintData.rings.forEach((ring, ringIndex) => {
-        if (ringIndex > voiceprintData.currentRingIndex) return; // Don't draw future rings
-        
-        const maxSamples = ringIndex === voiceprintData.currentRingIndex 
-            ? voiceprintData.sampleIndex 
-            : ring.sampleCount;
-        
-        if (ring.type === 'circle') {
-            drawCircleVoiceprint(ring, maxSamples);
-        } else if (ring.type === 'segmented') {
-            drawSegmentedVoiceprint(ring, maxSamples);
+        // 使用每个圈独立的 sampleIndex 来绘制
+        const maxSamples = ring.sampleIndex;
+
+        // 只绘制已经开始录制的圈（sampleIndex > 0）
+        if (maxSamples > 0) {
+            if (ring.type === 'circle') {
+                drawCircleVoiceprint(ring, ringIndex, maxSamples);
+            } else if (ring.type === 'segmented') {
+                drawSegmentedVoiceprint(ring, ringIndex, maxSamples);
+            }
         }
     });
 }
 
-// Helper: Get color based on amplitude (gradient from blue to red)
+// Helper: Get color based on amplitude (Neon Rose Palette)
 function getAmplitudeColor(amplitude) {
-    // Color gradient: blue (low) -> cyan -> green -> yellow -> orange -> red (high)
-    const hue = 240 - (amplitude * 180); // 240 (blue) to 60 (yellow-red)
-    const saturation = 80 + amplitude * 20;
-    const lightness = 50 + amplitude * 20;
-    return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+    // Neon Rose Gradient
+    // Low: Deep Pink/Magenta (300-340)
+    // Mid: Bright Red (350-10)
+    // High: Gold/White (40-60)
+
+    let h, s, l;
+
+    if (amplitude < 0.6) {
+        // Deep Magenta (300) to Red-Pink (350)
+        const t = amplitude / 0.6;
+        h = 300 + t * 50;
+        s = 80 + t * 20;
+        l = 40 + t * 20;
+    } else {
+        // Red-Pink (350) to Gold (50) (crossing 360)
+        const t = (amplitude - 0.6) / 0.4;
+        // Map 350 -> 410 (which is 50)
+        h = 350 + t * 60;
+        s = 100;
+        l = 60 + t * 40; // Bloom to white
+    }
+
+    return `hsl(${h % 360}, ${s}%, ${l}%)`;
 }
 
 // Helper: Smooth interpolation between points
@@ -823,69 +1263,153 @@ function smoothPoint(ring, index, maxSamples) {
 }
 
 // Draw voiceprint on standard circle
-function drawCircleVoiceprint(ring, maxSamples) {
+// Draw voiceprint on standard circle
+function drawCircleVoiceprint(ring, ringIndex, maxSamples) {
     const style = voiceprintSettings.style;
-    
+
+    // Get LIVE geometry from params instead of cached ring values
+    const fourCircles = calculateFourCircles();
+    // Safety check: if ringIndex is out of bounds for inner circles (0-3)
+    if (ringIndex >= fourCircles.length) return;
+
+    const liveCircle = fourCircles[ringIndex];
+    const centerX = liveCircle.cx;
+    const centerY = liveCircle.cy;
+    const baseRadius = liveCircle.radius;
+
     if (style === 'gradient-wave') {
         // Professional gradient waveform with color based on amplitude
         ctx.lineWidth = 3;
         ctx.shadowBlur = 15;
-        
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
         // Draw with gradient colors
-        for (let i = 0; i < maxSamples; i++) {
+        // We use a loop to draw segments, but we want them smooth.
+        // For gradient color per segment, we can't use a single path.
+        // But for "Rose" look, we want connected smooth curves.
+
+        // 获取当前圆圈的声波高度缩放因子
+        const waveHeightScale = params.innerCircles[ringIndex].waveHeight || 1.0;
+        // 计算基础高度和用户声音高度的占比
+        const baseHeightRatio = voiceprintSettings.baseHeightRatio;
+        const voiceHeightRatio = 1.0 - baseHeightRatio;
+        const baseVariation = 50 * baseHeightRatio; // 基础变化
+        const voiceVariation = 50 * voiceHeightRatio; // 用户声音变化
+
+        for (let i = 0; i < maxSamples - 1; i++) {
             const amplitude = ring.samples[i];
-            const nextAmplitude = ring.samples[(i + 1) % maxSamples] || 0;
+            const nextAmplitude = ring.samples[(i + 1) % ring.sampleCount];
+
+            // Calculate angles
             const angle = (i / ring.sampleCount) * Math.PI * 2;
             const nextAngle = ((i + 1) / ring.sampleCount) * Math.PI * 2;
-            
-            const variation = amplitude * 50;
-            const nextVariation = nextAmplitude * 50;
-            const radius = ring.radius + variation;
-            const nextRadius = ring.radius + nextVariation;
-            
-            const x = ring.centerX + Math.cos(angle) * radius;
-            const y = ring.centerY + Math.sin(angle) * radius;
-            const nextX = ring.centerX + Math.cos(nextAngle) * nextRadius;
-            const nextY = ring.centerY + Math.sin(nextAngle) * nextRadius;
-            
+
+            // Calculate radii with variation (基础 + 用户声音)
+            const variation = (baseVariation + amplitude * voiceVariation) * waveHeightScale;
+            const nextVariation = (baseVariation + nextAmplitude * voiceVariation) * waveHeightScale;
+            const r1 = baseRadius + variation;
+            const r2 = baseRadius + nextVariation;
+
+            // Points
+            const x1 = centerX + Math.cos(angle) * r1;
+            const y1 = centerY + Math.sin(angle) * r1;
+            const x2 = centerX + Math.cos(nextAngle) * r2;
+            const y2 = centerY + Math.sin(nextAngle) * r2;
+
+            // Simple smoothing: Control points? 
+            // For short segments, straight lines with high sample count look okay, 
+            // but let's try to be smoother if possible. 
+            // Given the structure, drawing small segments is necessary for color gradients.
+
             ctx.strokeStyle = getAmplitudeColor(amplitude);
             ctx.shadowColor = getAmplitudeColor(amplitude);
             ctx.beginPath();
-            ctx.moveTo(x, y);
-            ctx.lineTo(nextX, nextY);
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
             ctx.stroke();
         }
+
+        // Connect last to first if full circle
+        if (maxSamples === ring.sampleCount) {
+            const i = ring.sampleCount - 1;
+            const amplitude = ring.samples[i];
+            const nextAmplitude = ring.samples[0];
+            const angle = (i / ring.sampleCount) * Math.PI * 2;
+            const nextAngle = 0;
+
+            const r1 = baseRadius + (baseVariation + amplitude * voiceVariation) * waveHeightScale;
+            const r2 = baseRadius + (baseVariation + nextAmplitude * voiceVariation) * waveHeightScale;
+
+            const x1 = centerX + Math.cos(angle) * r1;
+            const y1 = centerY + Math.sin(angle) * r1;
+            const x2 = centerX + Math.cos(nextAngle) * r2;
+            const y2 = centerY + Math.sin(nextAngle) * r2;
+
+            ctx.strokeStyle = getAmplitudeColor(amplitude);
+            ctx.shadowColor = getAmplitudeColor(amplitude);
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.stroke();
+        }
+
     } else if (style === 'spectrum-bars') {
-        // Professional spectrum analyzer style
+        // Spectrum bars for standard circles with gradient colors
         ctx.shadowBlur = 8;
-        const barCount = Math.min(60, maxSamples); // Limit bars for clarity
-        const step = Math.floor(maxSamples / barCount);
+
+        // Get base color for this circle
+        const baseColor = params.innerCircles[ringIndex].color || 'white';
+
+        // Calculate dynamic bar width based on circumference to ensure consistent density
+        // Outer circles (larger radius) will have wider bars
+        const circumference = 2 * Math.PI * baseRadius;
+        const unitWidth = circumference / maxSamples;
+        // Use 80% of unit width for bar, leaving 20% for gap. Min 1px.
+        const barWidth = Math.max(1, unitWidth * 0.8);
+
+        // 计算基础高度和用户声音高度的占比
+        const baseHeightRatio = voiceprintSettings.baseHeightRatio; // 基础高度占比（默认0.4）
+        const voiceHeightRatio = 1.0 - baseHeightRatio; // 用户声音高度占比（默认0.6）
         
-        for (let i = 0; i < barCount; i++) {
-            const idx = i * step;
-            const amplitude = ring.samples[idx] || 0;
-            if (amplitude < 0.05) continue;
-            
-            const angle = (idx / ring.sampleCount) * Math.PI * 2;
-            const barLength = amplitude * 60;
-            const barWidth = 3;
-            
-            // Color based on amplitude
-            const color = getAmplitudeColor(amplitude);
-            ctx.fillStyle = color;
-            ctx.strokeStyle = color;
-            ctx.shadowColor = color;
-            
-            // Draw bar
-            const x1 = ring.centerX + Math.cos(angle) * ring.radius;
-            const y1 = ring.centerY + Math.sin(angle) * ring.radius;
-            const x2 = ring.centerX + Math.cos(angle) * (ring.radius + barLength);
-            const y2 = ring.centerY + Math.sin(angle) * (ring.radius + barLength);
-            
+        // 总高度基准值（相当于原来的60）
+        const totalHeightBase = 60;
+        const baseHeight = totalHeightBase * baseHeightRatio; // 基础高度（静音时）
+        const voiceHeight = totalHeightBase * voiceHeightRatio; // 用户声音高度（最大）
+        
+        // 获取当前圆圈的声波高度缩放因子
+        const waveHeightScale = params.innerCircles[ringIndex].waveHeight || 1.0;
+
+        // Draw bars for ALL recorded samples (no step/skip)
+        for (let i = 0; i < maxSamples; i++) {
+            const amplitude = ring.samples[i] || 0;
+            // Removed amplitude threshold to show silence baseline
+
+            const angle = (i / ring.sampleCount) * Math.PI * 2;
+            // 计算实际高度：基础高度 + 用户声音高度 * 振幅，然后乘以缩放因子
+            const barLength = (baseHeight + amplitude * voiceHeight) * waveHeightScale;
+
+            // Base point on the circle
+            const x1 = centerX + Math.cos(angle) * baseRadius;
+            const y1 = centerY + Math.sin(angle) * baseRadius;
+
+            // Tip point (radial outward)
+            const x2 = centerX + Math.cos(angle) * (baseRadius + barLength);
+            const y2 = centerY + Math.sin(angle) * (baseRadius + barLength);
+
+            // Calculate bar width direction (perpendicular to radial)
             const perpAngle = angle + Math.PI / 2;
             const dx = Math.cos(perpAngle) * barWidth * 0.5;
             const dy = Math.sin(perpAngle) * barWidth * 0.5;
-            
+
+            // Create gradient from base (dark) to tip (light)
+            const gradient = ctx.createLinearGradient(x1, y1, x2, y2);
+            gradient.addColorStop(0, getGradientColor(baseColor, 0)); // Dark at base
+            gradient.addColorStop(1, getGradientColor(baseColor, amplitude)); // Light at tip
+
+            ctx.fillStyle = gradient;
+            ctx.shadowColor = baseColor;
+
             ctx.beginPath();
             ctx.moveTo(x1 - dx, y1 - dy);
             ctx.lineTo(x1 + dx, y1 + dy);
@@ -900,589 +1424,256 @@ function drawCircleVoiceprint(ring, maxSamples) {
         const particleCount = Math.min(80, maxSamples);
         const step = Math.floor(maxSamples / particleCount);
         
+        // 获取当前圆圈的声波高度缩放因子
+        const waveHeightScale = params.innerCircles[ringIndex].waveHeight || 1.0;
+        // 计算基础高度和用户声音高度的占比
+        const baseHeightRatio = voiceprintSettings.baseHeightRatio;
+        const voiceHeightRatio = 1.0 - baseHeightRatio;
+        const baseVar = 45 * baseHeightRatio;
+        const voiceVar = 45 * voiceHeightRatio;
+
         for (let i = 0; i < particleCount; i++) {
             const idx = i * step;
             const amplitude = ring.samples[idx] || 0;
             if (amplitude < 0.1) continue;
-            
+
             const angle = (idx / ring.sampleCount) * Math.PI * 2;
-            const variation = amplitude * 45;
-            const radius = ring.radius + variation;
-            const x = ring.centerX + Math.cos(angle) * radius;
-            const y = ring.centerY + Math.sin(angle) * radius;
-            
+            const variation = (baseVar + amplitude * voiceVar) * waveHeightScale;
+            const r = baseRadius + variation;
+            const x = centerX + Math.cos(angle) * r;
+            const y = centerY + Math.sin(angle) * r;
+
             const color = getAmplitudeColor(amplitude);
             ctx.fillStyle = color;
             ctx.shadowColor = color;
-            
+
             const size = 2 + amplitude * 4;
             ctx.beginPath();
             ctx.arc(x, y, size, 0, Math.PI * 2);
             ctx.fill();
         }
-    } else if (style === 'smooth-filled') {
-        // Smooth filled waveform (like audio software)
-        ctx.lineWidth = 2;
-        ctx.shadowBlur = 12;
-        
-        // Create gradient
-        const gradient = ctx.createLinearGradient(
-            ring.centerX - ring.radius, ring.centerY - ring.radius,
-            ring.centerX + ring.radius, ring.centerY + ring.radius
-        );
-        gradient.addColorStop(0, 'rgba(100, 200, 255, 0.8)');
-        gradient.addColorStop(0.5, 'rgba(255, 100, 255, 0.8)');
-        gradient.addColorStop(1, 'rgba(255, 200, 100, 0.8)');
-        
-        ctx.fillStyle = gradient;
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-        ctx.shadowColor = 'rgba(255, 100, 255, 0.8)';
-        
-        // Draw filled waveform
-        ctx.beginPath();
-        for (let i = 0; i <= maxSamples; i++) {
-            const idx = i % maxSamples;
-            const amplitude = smoothPoint(ring, idx, maxSamples);
-            const angle = (idx / ring.sampleCount) * Math.PI * 2;
-            const variation = amplitude * 40;
-            const radius = ring.radius + variation;
-            const x = ring.centerX + Math.cos(angle) * radius;
-            const y = ring.centerY + Math.sin(angle) * radius;
-            
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        }
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-    } else if (style === 'neon-outline') {
-        // Neon outline effect
-        ctx.lineWidth = 4;
-        ctx.shadowBlur = 25;
-        
-        // Outer glow
-        ctx.strokeStyle = 'rgba(255, 100, 255, 0.6)';
-        ctx.shadowColor = 'rgba(255, 100, 255, 1)';
-        ctx.beginPath();
-        for (let i = 0; i < maxSamples; i++) {
-            const amplitude = ring.samples[i];
-            const angle = (i / ring.sampleCount) * Math.PI * 2;
-            const variation = amplitude * 45;
-            const radius = ring.radius + variation;
-            const x = ring.centerX + Math.cos(angle) * radius;
-            const y = ring.centerY + Math.sin(angle) * radius;
-            
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-        
-        // Inner bright line
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+    } else {
+        // Generic fallback for other styles
         ctx.shadowBlur = 10;
-        ctx.stroke();
-    } else if (style === 'classic-wave') {
-        // Classic oscilloscope-style waveform
-        ctx.strokeStyle = 'rgba(0, 255, 255, 0.9)';
-        ctx.lineWidth = 2;
-        ctx.shadowBlur = 8;
-        ctx.shadowColor = 'rgba(0, 255, 255, 0.6)';
         
-        ctx.beginPath();
+        // 获取当前圆圈的声波高度缩放因子
+        const waveHeightScale = params.innerCircles[ringIndex].waveHeight || 1.0;
+        // 计算基础高度和用户声音高度的占比
+        const baseHeightRatio = voiceprintSettings.baseHeightRatio;
+        const voiceHeightRatio = 1.0 - baseHeightRatio;
+        const baseVar = 40 * baseHeightRatio;
+        const voiceVar = 40 * voiceHeightRatio;
+
         for (let i = 0; i < maxSamples; i++) {
             const amplitude = ring.samples[i];
+            if (amplitude < 0.05) continue;
+
             const angle = (i / ring.sampleCount) * Math.PI * 2;
-            const variation = amplitude * 35;
-            const radius = ring.radius + variation;
-            const x = ring.centerX + Math.cos(angle) * radius;
-            const y = ring.centerY + Math.sin(angle) * radius;
-            
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-    } else if (style === 'wave') {
-        // Wave: Continuous smooth waveform with radius variation
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        for (let i = 0; i < maxSamples; i++) {
-            const amplitude = ring.samples[i];
-            const angle = (i / ring.sampleCount) * Math.PI * 2;
-            const variation = amplitude * 40; // Larger variation for wave
-            const radius = ring.radius + variation;
-            const x = ring.centerX + Math.cos(angle) * radius;
-            const y = ring.centerY + Math.sin(angle) * radius;
-            
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
-    } else if (style === 'smooth') {
-        // Smooth: Closed smooth curve
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        for (let i = 0; i < maxSamples; i++) {
-            const amplitude = ring.samples[i];
-            const angle = (i / ring.sampleCount) * Math.PI * 2;
-            const variation = amplitude * 30;
-            const radius = ring.radius + variation;
-            const x = ring.centerX + Math.cos(angle) * radius;
-            const y = ring.centerY + Math.sin(angle) * radius;
-            
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        }
-        if (maxSamples > 0) {
-            ctx.closePath();
-        }
-        ctx.stroke();
-    } else if (style === 'spike') {
-        // Spike: Thin, sharp lines radiating outward
-        ctx.lineWidth = 1; // Thinner for spikes
-        for (let i = 0; i < maxSamples; i += 2) { // Sample every other point for cleaner spikes
-            const amplitude = ring.samples[i];
-            if (amplitude < 0.1) continue; // Skip very low amplitudes
-            
-            const angle = (i / ring.sampleCount) * Math.PI * 2;
-            const baseX = ring.centerX + Math.cos(angle) * ring.radius;
-            const baseY = ring.centerY + Math.sin(angle) * ring.radius;
-            const spikeLength = amplitude * 60; // Longer spikes
-            const spikeX = baseX + Math.cos(angle) * spikeLength;
-            const spikeY = baseY + Math.sin(angle) * spikeLength;
-            
+            const variation = (baseVar + amplitude * voiceVar) * waveHeightScale;
+            const r = baseRadius + variation;
+            const x = centerX + Math.cos(angle) * r;
+            const y = centerY + Math.sin(angle) * r;
+
+            ctx.fillStyle = getAmplitudeColor(amplitude);
+            ctx.shadowColor = ctx.fillStyle;
+
+            const size = 2 + amplitude * 3;
             ctx.beginPath();
-            ctx.moveTo(baseX, baseY);
-            ctx.lineTo(spikeX, spikeY);
-            ctx.stroke();
-        }
-    } else if (style === 'bar') {
-        // Bar: Thick rectangular bars
-        ctx.lineWidth = 4; // Thicker for bars
-        for (let i = 0; i < maxSamples; i += 3) { // Sample every 3rd point for cleaner bars
-            const amplitude = ring.samples[i];
-            if (amplitude < 0.05) continue; // Skip very low amplitudes
-            
-            const angle = (i / ring.sampleCount) * Math.PI * 2;
-            const barLength = amplitude * 50;
-            const barWidth = 2; // Width of the bar
-            
-            // Calculate perpendicular direction for bar width
-            const perpAngle = angle + Math.PI / 2;
-            const dx = Math.cos(perpAngle) * barWidth * 0.5;
-            const dy = Math.sin(perpAngle) * barWidth * 0.5;
-            
-            const x1 = ring.centerX + Math.cos(angle) * ring.radius;
-            const y1 = ring.centerY + Math.sin(angle) * ring.radius;
-            const x2 = ring.centerX + Math.cos(angle) * (ring.radius + barLength);
-            const y2 = ring.centerY + Math.sin(angle) * (ring.radius + barLength);
-            
-            // Draw bar as a rectangle
-            ctx.beginPath();
-            ctx.moveTo(x1 - dx, y1 - dy);
-            ctx.lineTo(x1 + dx, y1 + dy);
-            ctx.lineTo(x2 + dx, y2 + dy);
-            ctx.lineTo(x2 - dx, y2 - dy);
-            ctx.closePath();
+            ctx.arc(x, y, size, 0, Math.PI * 2);
             ctx.fill();
         }
-    } else if (style === 'spiral') {
-        // Spiral: Waveform with spiral modulation
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        for (let i = 0; i < maxSamples; i++) {
-            const amplitude = ring.samples[i];
-            const angle = (i / ring.sampleCount) * Math.PI * 2;
-            // Add spiral effect: amplitude affects both radius and angle
-            const spiralRadius = amplitude * 30;
-            const spiralAngle = angle + amplitude * 0.5; // Spiral twist
-            const radius = ring.radius + spiralRadius;
-            const x = ring.centerX + Math.cos(spiralAngle) * radius;
-            const y = ring.centerY + Math.sin(spiralAngle) * radius;
-            
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-        }
-        ctx.stroke();
     }
-    
-    ctx.shadowBlur = 0;
 }
 
 // Draw voiceprint on segmented path (Circle 5 and 6)
-// Uses the same path calculation as drawSegmentedCircle
-function drawSegmentedVoiceprint(ring, maxSamples) {
+// Draws samples in the SAME ORDER they were recorded (sequentially across all segments)
+function drawSegmentedVoiceprint(ring, ringIndex, maxSamples) {
     const style = voiceprintSettings.style;
-    const numSegments = ring.segmentCount;
-    // Calculate samples per segment based on ACTUAL recorded samples, not total sample count
-    const samplesPerSegment = Math.floor(maxSamples / numSegments);
+
+    // Get LIVE geometry from params
+    let circleParams;
+    if (ringIndex === 4) circleParams = params.outerCircle5;
+    else if (ringIndex === 5) circleParams = params.outerCircle6;
+    else return;
+
+    const numSegments = circleParams.segmentCount;
+    const baseRadius = config.maxRadius * circleParams.radius;
+
+    // Calculate segment geometry
+    const initialUnit = 1.0 / numSegments;
+    const actualSegmentLength = initialUnit * (1 + circleParams.segmentLength);
+    const segmentAngleSize = actualSegmentLength * Math.PI * 2;
+    const gapSize = (Math.PI * 2 - segmentAngleSize * numSegments) / numSegments;
+
+    // 在克隆体模式下，每个segment的最大样本数（固定值）
+    const maxSamplesPerSegment = Math.floor(ring.sampleCount / numSegments);
+    // 当前实际应该绘制的样本数（不能超过已录制的样本数）
+    const actualSamplesToDraw = Math.min(maxSamples, maxSamplesPerSegment);
+
+    const cosRot = Math.cos(circleParams.selfRotation);
+    const sinRot = Math.sin(circleParams.selfRotation);
     
-    // Use same logic as drawSegmentedCircle
-    let currentAngle = ring.globalRotation;
-    const cosRot = Math.cos(ring.selfRotation);
-    const sinRot = Math.sin(ring.selfRotation);
-    
-    for (let seg = 0; seg < numSegments; seg++) {
-        // Calculate segment midpoint angle (same as drawSegmentedCircle)
-        const segmentMidAngle = currentAngle + ring.segmentAngleSize * 0.5;
+    // 获取当前圆圈的声波高度缩放因子
+    const waveHeightScale = circleParams.waveHeight || 1.0;
+    // 计算基础高度和用户声音高度的占比
+    const baseHeightRatio = voiceprintSettings.baseHeightRatio;
+    const voiceHeightRatio = 1.0 - baseHeightRatio;
+    const baseVariation = 50 * baseHeightRatio; // 基础变化
+    const voiceVariation = 50 * voiceHeightRatio; // 用户声音变化
+
+    if (style === 'gradient-wave') {
+        ctx.lineWidth = 3;
+        ctx.shadowBlur = 15;
+        ctx.lineCap = 'round';
+
+        // 优化：所有花瓣同时绘制，每个花瓣从自己的起点持续绘制到终点
+        // 所有segment同时开始，使用相同的样本数据，从0持续绘制到actualSamplesToDraw
         
-        // Calculate the center point of the arc on the circle (rotation center for self-rotation)
-        const centerX = ring.centerX + Math.cos(segmentMidAngle) * ring.baseRadius;
-        const centerY = ring.centerY + Math.sin(segmentMidAngle) * ring.baseRadius;
-        
-        // Calculate which samples belong to this segment
-        // Use actual recorded samples (maxSamples), not total sampleCount
-        const segmentStartSample = seg * samplesPerSegment;
-        const segmentEndSample = Math.min((seg + 1) * samplesPerSegment, maxSamples);
-        
-        // Only draw if this segment has recorded samples
-        if (segmentStartSample >= maxSamples) {
-            // Move to next segment angle for proper positioning
-            currentAngle += ring.segmentAngleSize + ring.gapSize;
-            continue;
-        }
-        
-        const segmentSampleCount = segmentEndSample - segmentStartSample;
-        
-        if (style === 'gradient-wave') {
-            // Gradient waveform for segmented path - draw continuous path with gradient colors
-            ctx.lineWidth = 3;
-            ctx.shadowBlur = 15;
+        // 外层循环：遍历样本位置（所有segment共享相同的进度）
+        for (let posInSegment = 0; posInSegment < actualSamplesToDraw - 1; posInSegment++) {
+            // 所有segment使用相同的样本索引（克隆体模式）
+            const sampleIdx = posInSegment;
+            const amplitude1 = ring.samples[sampleIdx] || 0;
+            const amplitude2 = ring.samples[sampleIdx + 1] || 0;
             
-            // Draw continuous path, but only up to recorded samples
-            if (segmentSampleCount > 0) {
-                // Draw line segments with gradient colors
-                for (let i = segmentStartSample; i < segmentEndSample - 1; i++) {
-                    const amplitude1 = ring.samples[i] || 0;
-                    const amplitude2 = ring.samples[i + 1] || 0;
-                    
-                    const t1 = (i - segmentStartSample) / segmentSampleCount;
-                    const t2 = ((i + 1) - segmentStartSample) / segmentSampleCount;
-                    const clampedT1 = Math.min(t1, 1.0);
-                    const clampedT2 = Math.min(t2, 1.0);
-                    
-                    const originalAngle1 = currentAngle + clampedT1 * ring.segmentAngleSize;
-                    const originalAngle2 = currentAngle + clampedT2 * ring.segmentAngleSize;
-                    
-                    const variation1 = amplitude1 * 50;
-                    const variation2 = amplitude2 * 50;
-                    const originalRadius1 = ring.baseRadius + variation1;
-                    const originalRadius2 = ring.baseRadius + variation2;
-                    
-                    const originalX1 = ring.centerX + Math.cos(originalAngle1) * originalRadius1;
-                    const originalY1 = ring.centerY + Math.sin(originalAngle1) * originalRadius1;
-                    const originalX2 = ring.centerX + Math.cos(originalAngle2) * originalRadius2;
-                    const originalY2 = ring.centerY + Math.sin(originalAngle2) * originalRadius2;
-                    
-                    // Apply self-rotation
-                    const dx1 = originalX1 - centerX;
-                    const dy1 = originalY1 - centerY;
-                    const rotatedX1 = dx1 * cosRot - dy1 * sinRot;
-                    const rotatedY1 = dx1 * sinRot + dy1 * cosRot;
-                    const x1 = centerX + rotatedX1;
-                    const y1 = centerY + rotatedY1;
-                    
-                    const dx2 = originalX2 - centerX;
-                    const dy2 = originalY2 - centerY;
-                    const rotatedX2 = dx2 * cosRot - dy2 * sinRot;
-                    const rotatedY2 = dx2 * sinRot + dy2 * cosRot;
-                    const x2 = centerX + rotatedX2;
-                    const y2 = centerY + rotatedY2;
-                    
-                    // Draw line segment with color based on average amplitude
-                    const avgAmplitude = (amplitude1 + amplitude2) / 2;
-                    ctx.strokeStyle = getAmplitudeColor(avgAmplitude);
-                    ctx.shadowColor = getAmplitudeColor(avgAmplitude);
-                    
-                    ctx.beginPath();
-                    ctx.moveTo(x1, y1);
-                    ctx.lineTo(x2, y2);
-                    ctx.stroke();
-                }
-            }
-        } else if (style === 'spectrum-bars') {
-            // Spectrum bars for segmented path
-            ctx.shadowBlur = 8;
-            const barCount = Math.min(15, segmentSampleCount);
-            const step = Math.floor(segmentSampleCount / barCount);
-            
-            for (let j = 0; j < barCount; j++) {
-                const idx = segmentStartSample + j * step;
-                if (idx >= segmentEndSample) break;
-                
-                const amplitude = ring.samples[idx] || 0;
-                if (amplitude < 0.05) continue;
-                
-                const t = (idx - segmentStartSample) / segmentSampleCount;
-                const clampedT = Math.min(t, 1.0);
-                const originalAngle = currentAngle + clampedT * ring.segmentAngleSize;
-                const originalX = ring.centerX + Math.cos(originalAngle) * ring.baseRadius;
-                const originalY = ring.centerY + Math.sin(originalAngle) * ring.baseRadius;
-                
-                const dx = originalX - centerX;
-                const dy = originalY - centerY;
-                const rotatedX = dx * cosRot - dy * sinRot;
-                const rotatedY = dx * sinRot + dy * cosRot;
-                const x1 = centerX + rotatedX;
-                const y1 = centerY + rotatedY;
-                
-                const barLength = amplitude * 60;
-                const barAngle = Math.atan2(y1 - ring.centerY, x1 - ring.centerX);
-                const x2 = x1 + Math.cos(barAngle) * barLength;
-                const y2 = y1 + Math.sin(barAngle) * barLength;
-                
-                const color = getAmplitudeColor(amplitude);
-                ctx.fillStyle = color;
-                ctx.shadowColor = color;
-                
-                const barWidth = 3;
-                const perpAngle = barAngle + Math.PI / 2;
-                const dxBar = Math.cos(perpAngle) * barWidth * 0.5;
-                const dyBar = Math.sin(perpAngle) * barWidth * 0.5;
-                
+            // 内层循环：同时绘制所有segment（花瓣）
+            for (let segmentIdx = 0; segmentIdx < numSegments; segmentIdx++) {
+                // Calculate segment angles (pre-calculate for efficiency)
+                const segmentStartAngle = circleParams.globalRotation + segmentIdx * (segmentAngleSize + gapSize);
+                const segmentMidAngle = segmentStartAngle + segmentAngleSize * 0.5;
+                const centerX = config.centerX + Math.cos(segmentMidAngle) * baseRadius;
+                const centerY = config.centerY + Math.sin(segmentMidAngle) * baseRadius;
+
+                // Calculate angles（每个segment从自己的起点开始绘制）
+                // t基于固定的maxSamplesPerSegment计算，而不是基于动态的actualSamplesToDraw
+                const t1 = posInSegment / maxSamplesPerSegment;
+                const t2 = (posInSegment + 1) / maxSamplesPerSegment;
+                const angle1 = segmentStartAngle + t1 * segmentAngleSize;
+                const angle2 = segmentStartAngle + t2 * segmentAngleSize;
+
+                // Calculate points (基础 + 用户声音)
+                const variation1 = (baseVariation + amplitude1 * voiceVariation) * waveHeightScale;
+                const variation2 = (baseVariation + amplitude2 * voiceVariation) * waveHeightScale;
+                const r1 = baseRadius + variation1;
+                const r2 = baseRadius + variation2;
+
+                const ox1 = config.centerX + Math.cos(angle1) * r1;
+                const oy1 = config.centerY + Math.sin(angle1) * r1;
+                const ox2 = config.centerX + Math.cos(angle2) * r2;
+                const oy2 = config.centerY + Math.sin(angle2) * r2;
+
+                // Apply self-rotation
+                const dx1 = ox1 - centerX;
+                const dy1 = oy1 - centerY;
+                const rx1 = dx1 * cosRot - dy1 * sinRot;
+                const ry1 = dx1 * sinRot + dy1 * cosRot;
+                const x1 = centerX + rx1;
+                const y1 = centerY + ry1;
+
+                const dx2 = ox2 - centerX;
+                const dy2 = oy2 - centerY;
+                const rx2 = dx2 * cosRot - dy2 * sinRot;
+                const ry2 = dx2 * sinRot + dy2 * cosRot;
+                const x2 = centerX + rx2;
+                const y2 = centerY + ry2;
+
+                const avgAmplitude = (amplitude1 + amplitude2) / 2;
+                ctx.strokeStyle = getAmplitudeColor(avgAmplitude);
+                ctx.shadowColor = getAmplitudeColor(avgAmplitude);
+
                 ctx.beginPath();
-                ctx.moveTo(x1 - dxBar, y1 - dyBar);
-                ctx.lineTo(x1 + dxBar, y1 + dyBar);
-                ctx.lineTo(x2 + dxBar, y2 + dyBar);
-                ctx.lineTo(x2 - dxBar, y2 - dyBar);
-                ctx.closePath();
-                ctx.fill();
-            }
-        } else if (style === 'glow-particles') {
-            // Glow particles for segmented path
-            ctx.shadowBlur = 20;
-            const particleCount = Math.min(20, segmentSampleCount);
-            const step = Math.floor(segmentSampleCount / particleCount);
-            
-            for (let j = 0; j < particleCount; j++) {
-                const idx = segmentStartSample + j * step;
-                if (idx >= segmentEndSample) break;
-                
-                const amplitude = ring.samples[idx] || 0;
-                if (amplitude < 0.1) continue;
-                
-                const t = (idx - segmentStartSample) / segmentSampleCount;
-                const clampedT = Math.min(t, 1.0);
-                const originalAngle = currentAngle + clampedT * ring.segmentAngleSize;
-                const variation = amplitude * 45;
-                const originalRadius = ring.baseRadius + variation;
-                const originalX = ring.centerX + Math.cos(originalAngle) * originalRadius;
-                const originalY = ring.centerY + Math.sin(originalAngle) * originalRadius;
-                
-                const dx = originalX - centerX;
-                const dy = originalY - centerY;
-                const rotatedX = dx * cosRot - dy * sinRot;
-                const rotatedY = dx * sinRot + dy * cosRot;
-                const x = centerX + rotatedX;
-                const y = centerY + rotatedY;
-                
-                const color = getAmplitudeColor(amplitude);
-                ctx.fillStyle = color;
-                ctx.shadowColor = color;
-                
-                const size = 2 + amplitude * 4;
-                ctx.beginPath();
-                ctx.arc(x, y, size, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        } else if (style === 'smooth-filled') {
-            // Smooth filled for segmented path
-            ctx.lineWidth = 2;
-            ctx.shadowBlur = 12;
-            
-            const gradient = ctx.createLinearGradient(
-                ring.centerX - ring.baseRadius, ring.centerY - ring.baseRadius,
-                ring.centerX + ring.baseRadius, ring.centerY + ring.baseRadius
-            );
-            gradient.addColorStop(0, 'rgba(100, 200, 255, 0.8)');
-            gradient.addColorStop(0.5, 'rgba(255, 100, 255, 0.8)');
-            gradient.addColorStop(1, 'rgba(255, 200, 100, 0.8)');
-            
-            ctx.fillStyle = gradient;
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-            ctx.shadowColor = 'rgba(255, 100, 255, 0.8)';
-            
-            ctx.beginPath();
-            for (let i = segmentStartSample; i < segmentEndSample; i++) {
-                // Use local smoothing within segment
-                const prevIdx = i > segmentStartSample ? i - 1 : segmentStartSample;
-                const nextIdx = i < segmentEndSample - 1 ? i + 1 : segmentEndSample - 1;
-                const prev = ring.samples[prevIdx] || 0;
-                const curr = ring.samples[i] || 0;
-                const next = ring.samples[nextIdx] || 0;
-                const amplitude = (prev + curr * 2 + next) / 4; // Local smoothing
-                
-                const t = (i - segmentStartSample) / segmentSampleCount;
-                const clampedT = Math.min(t, 1.0);
-                const originalAngle = currentAngle + clampedT * ring.segmentAngleSize;
-                const variation = amplitude * 40;
-                const originalRadius = ring.baseRadius + variation;
-                const originalX = ring.centerX + Math.cos(originalAngle) * originalRadius;
-                const originalY = ring.centerY + Math.sin(originalAngle) * originalRadius;
-                
-                const dx = originalX - centerX;
-                const dy = originalY - centerY;
-                const rotatedX = dx * cosRot - dy * sinRot;
-                const rotatedY = dx * sinRot + dy * cosRot;
-                const x = centerX + rotatedX;
-                const y = centerY + rotatedY;
-                
-                if (i === segmentStartSample) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
-            }
-            ctx.stroke();
-            ctx.fill();
-        } else if (style === 'neon-outline') {
-            // Neon outline for segmented path
-            ctx.lineWidth = 4;
-            ctx.shadowBlur = 25;
-            ctx.strokeStyle = 'rgba(255, 100, 255, 0.6)';
-            ctx.shadowColor = 'rgba(255, 100, 255, 1)';
-            
-            ctx.beginPath();
-            for (let i = segmentStartSample; i < segmentEndSample; i++) {
-                const amplitude = ring.samples[i];
-                const t = (i - segmentStartSample) / segmentSampleCount;
-                const clampedT = Math.min(t, 1.0);
-                const originalAngle = currentAngle + clampedT * ring.segmentAngleSize;
-                const variation = amplitude * 45;
-                const originalRadius = ring.baseRadius + variation;
-                const originalX = ring.centerX + Math.cos(originalAngle) * originalRadius;
-                const originalY = ring.centerY + Math.sin(originalAngle) * originalRadius;
-                
-                const dx = originalX - centerX;
-                const dy = originalY - centerY;
-                const rotatedX = dx * cosRot - dy * sinRot;
-                const rotatedY = dx * sinRot + dy * cosRot;
-                const x = centerX + rotatedX;
-                const y = centerY + rotatedY;
-                
-                if (i === segmentStartSample) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
-            }
-            ctx.stroke();
-            
-            ctx.lineWidth = 2;
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-            ctx.shadowBlur = 10;
-            ctx.stroke();
-        } else if (style === 'classic-wave') {
-            // Classic wave for segmented path
-            ctx.strokeStyle = 'rgba(0, 255, 255, 0.9)';
-            ctx.lineWidth = 2;
-            ctx.shadowBlur = 8;
-            ctx.shadowColor = 'rgba(0, 255, 255, 0.6)';
-            
-            ctx.beginPath();
-            for (let i = segmentStartSample; i < segmentEndSample; i++) {
-                const amplitude = ring.samples[i];
-                const t = (i - segmentStartSample) / segmentSampleCount;
-                const clampedT = Math.min(t, 1.0);
-                const originalAngle = currentAngle + clampedT * ring.segmentAngleSize;
-                const variation = amplitude * 35;
-                const originalRadius = ring.baseRadius + variation;
-                const originalX = ring.centerX + Math.cos(originalAngle) * originalRadius;
-                const originalY = ring.centerY + Math.sin(originalAngle) * originalRadius;
-                
-                const dx = originalX - centerX;
-                const dy = originalY - centerY;
-                const rotatedX = dx * cosRot - dy * sinRot;
-                const rotatedY = dx * sinRot + dy * cosRot;
-                const x = centerX + rotatedX;
-                const y = centerY + rotatedY;
-                
-                if (i === segmentStartSample) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
-            }
-            ctx.stroke();
-        } else if (style === 'wave') {
-            // Smooth: Closed smooth curve
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            for (let i = segmentStartSample; i < segmentEndSample; i++) {
-                const amplitude = ring.samples[i];
-                const t = (i - segmentStartSample) / segmentSampleCount;
-                const clampedT = Math.min(t, 1.0);
-                const originalAngle = currentAngle + clampedT * ring.segmentAngleSize;
-                const variation = amplitude * 30;
-                const originalRadius = ring.baseRadius + variation;
-                const originalX = ring.centerX + Math.cos(originalAngle) * originalRadius;
-                const originalY = ring.centerY + Math.sin(originalAngle) * originalRadius;
-                
-                const dx = originalX - centerX;
-                const dy = originalY - centerY;
-                const rotatedX = dx * cosRot - dy * sinRot;
-                const rotatedY = dx * sinRot + dy * cosRot;
-                const x = centerX + rotatedX;
-                const y = centerY + rotatedY;
-                
-                if (i === segmentStartSample) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
-            }
-            ctx.stroke();
-        } else if (style === 'spike') {
-            // Spike: Thin, sharp lines
-            ctx.lineWidth = 1; // Thinner for spikes
-            for (let i = segmentStartSample; i < segmentEndSample; i += 2) { // Sample every other point
-                const amplitude = ring.samples[i];
-                if (amplitude < 0.1) continue;
-                
-                const t = (i - segmentStartSample) / segmentSampleCount;
-                const clampedT = Math.min(t, 1.0);
-                const originalAngle = currentAngle + clampedT * ring.segmentAngleSize;
-                const originalX = ring.centerX + Math.cos(originalAngle) * ring.baseRadius;
-                const originalY = ring.centerY + Math.sin(originalAngle) * ring.baseRadius;
-                
-                const dx = originalX - centerX;
-                const dy = originalY - centerY;
-                const rotatedX = dx * cosRot - dy * sinRot;
-                const rotatedY = dx * sinRot + dy * cosRot;
-                const baseX = centerX + rotatedX;
-                const baseY = centerY + rotatedY;
-                
-                // Spike direction (radial from center)
-                const spikeLength = amplitude * 60; // Longer spikes
-                const spikeAngle = Math.atan2(baseY - ring.centerY, baseX - ring.centerX);
-                const spikeX = baseX + Math.cos(spikeAngle) * spikeLength;
-                const spikeY = baseY + Math.sin(spikeAngle) * spikeLength;
-                
-                ctx.beginPath();
-                ctx.moveTo(baseX, baseY);
-                ctx.lineTo(spikeX, spikeY);
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
                 ctx.stroke();
             }
-        } else if (style === 'bar') {
-            // Bar: Thick rectangular bars
-            ctx.lineWidth = 4; // Thicker for bars
-            for (let i = segmentStartSample; i < segmentEndSample; i += 3) { // Sample every 3rd point
-                const amplitude = ring.samples[i];
-                if (amplitude < 0.05) continue;
+        }
+    } else if (style === 'spectrum-bars') {
+        ctx.shadowBlur = 8;
+
+        // Calculate dynamic bar width based on effective circumference
+        // Effective circumference = total length of all segments
+        const totalArcAngle = segmentAngleSize * numSegments;
+        const effectiveCircumference = totalArcAngle * baseRadius;
+        const unitWidth = effectiveCircumference / maxSamples;
+        // Use 80% of unit width for bar, leaving 20% for gap. Min 1px.
+        const barWidth = Math.max(1, unitWidth * 0.8);
+
+        // 计算基础高度和用户声音高度的占比
+        const baseHeightRatio = voiceprintSettings.baseHeightRatio; // 基础高度占比（默认0.15）
+        const voiceHeightRatio = 1.0 - baseHeightRatio; // 用户声音高度占比（默认0.85）
+        
+        // 总高度基准值（相当于原来的60）
+        const totalHeightBase = 60;
+        const baseHeight = totalHeightBase * baseHeightRatio; // 基础高度（静音时）
+        const voiceHeight = totalHeightBase * voiceHeightRatio; // 用户声音高度（最大）
+        
+        // 获取当前圆圈的声波高度缩放因子
+        const waveHeightScale = circleParams.waveHeight || 1.0;
+
+        // 优化：所有花瓣同时绘制，每个花瓣从自己的起点持续绘制到终点
+        // 所有segment同时开始，使用相同的样本数据，从0持续绘制到actualSamplesToDraw
+        
+        // 外层循环：遍历样本位置（所有segment共享相同的进度）
+        for (let posInSegment = 0; posInSegment < actualSamplesToDraw; posInSegment++) {
+            // 所有segment使用相同的样本索引（克隆体模式）
+            const sampleIdx = posInSegment;
+            const amplitude = ring.samples[sampleIdx] || 0;
+            
+            // 内层循环：同时绘制所有segment（花瓣）
+            for (let segmentIdx = 0; segmentIdx < numSegments; segmentIdx++) {
+                // Get base color for this segment
+                const baseColor = circleParams.segmentColors[segmentIdx] || 'white';
                 
-                const t = (i - segmentStartSample) / segmentSampleCount;
-                const clampedT = Math.min(t, 1.0);
-                const originalAngle = currentAngle + clampedT * ring.segmentAngleSize;
-                const originalX = ring.centerX + Math.cos(originalAngle) * ring.baseRadius;
-                const originalY = ring.centerY + Math.sin(originalAngle) * ring.baseRadius;
-                
-                const dx = originalX - centerX;
-                const dy = originalY - centerY;
-                const rotatedX = dx * cosRot - dy * sinRot;
-                const rotatedY = dx * sinRot + dy * cosRot;
-                const x1 = centerX + rotatedX;
-                const y1 = centerY + rotatedY;
-                
-                // Bar direction and width
-                const barLength = amplitude * 50;
-                const barAngle = Math.atan2(y1 - ring.centerY, x1 - ring.centerX);
-                const barWidth = 2;
+                // Calculate segment angles (pre-calculate for efficiency)
+                const segmentStartAngle = circleParams.globalRotation + segmentIdx * (segmentAngleSize + gapSize);
+                const segmentMidAngle = segmentStartAngle + segmentAngleSize * 0.5;
+                const centerX = config.centerX + Math.cos(segmentMidAngle) * baseRadius;
+                const centerY = config.centerY + Math.sin(segmentMidAngle) * baseRadius;
+
+                // Calculate angle for this position（每个segment从自己的起点开始绘制）
+                // t基于固定的maxSamplesPerSegment计算，而不是基于动态的actualSamplesToDraw
+                const t = posInSegment / maxSamplesPerSegment;
+                const angle = segmentStartAngle + t * segmentAngleSize;
+
+                // Calculate base and tip points
+                const ox1 = config.centerX + Math.cos(angle) * baseRadius;
+                const oy1 = config.centerY + Math.sin(angle) * baseRadius;
+
+                // 计算实际高度：基础高度 + 用户声音高度 * 振幅，然后乘以缩放因子
+                const barLength = (baseHeight + amplitude * voiceHeight) * waveHeightScale;
+                const ox2 = config.centerX + Math.cos(angle) * (baseRadius + barLength);
+                const oy2 = config.centerY + Math.sin(angle) * (baseRadius + barLength);
+
+                // Apply self-rotation
+                const dx1 = ox1 - centerX;
+                const dy1 = oy1 - centerY;
+                const rx1 = dx1 * cosRot - dy1 * sinRot;
+                const ry1 = dx1 * sinRot + dy1 * cosRot;
+                const x1 = centerX + rx1;
+                const y1 = centerY + ry1;
+
+                const dx2 = ox2 - centerX;
+                const dy2 = oy2 - centerY;
+                const rx2 = dx2 * cosRot - dy2 * sinRot;
+                const ry2 = dx2 * sinRot + dy2 * cosRot;
+                const x2 = centerX + rx2;
+                const y2 = centerY + ry2;
+
+                // Calculate bar width
+                const barAngle = Math.atan2(y2 - y1, x2 - x1);
+                // Use dynamic barWidth
                 const perpAngle = barAngle + Math.PI / 2;
                 const dxBar = Math.cos(perpAngle) * barWidth * 0.5;
                 const dyBar = Math.sin(perpAngle) * barWidth * 0.5;
-                
-                const x2 = x1 + Math.cos(barAngle) * barLength;
-                const y2 = y1 + Math.sin(barAngle) * barLength;
-                
-                // Draw bar as rectangle
+
+                // Create gradient from base (dark) to tip (light)
+                const gradient = ctx.createLinearGradient(x1, y1, x2, y2);
+                gradient.addColorStop(0, getGradientColor(baseColor, 0)); // Dark at base
+                gradient.addColorStop(1, getGradientColor(baseColor, amplitude)); // Light at tip
+
+                ctx.fillStyle = gradient;
+                ctx.shadowColor = baseColor;
+
                 ctx.beginPath();
                 ctx.moveTo(x1 - dxBar, y1 - dyBar);
                 ctx.lineTo(x1 + dxBar, y1 + dyBar);
@@ -1491,40 +1682,59 @@ function drawSegmentedVoiceprint(ring, maxSamples) {
                 ctx.closePath();
                 ctx.fill();
             }
-        } else if (style === 'spiral') {
-            // Spiral: Waveform with spiral modulation
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            for (let i = segmentStartSample; i < segmentEndSample; i++) {
-                const amplitude = ring.samples[i];
-                const t = (i - segmentStartSample) / segmentSampleCount;
-                const clampedT = Math.min(t, 1.0);
-                const originalAngle = currentAngle + clampedT * ring.segmentAngleSize;
-                
-                // Add spiral effect
-                const spiralRadius = amplitude * 30;
-                const spiralAngle = originalAngle + amplitude * 0.5; // Spiral twist
-                const originalRadius = ring.baseRadius + spiralRadius;
-                const originalX = ring.centerX + Math.cos(spiralAngle) * originalRadius;
-                const originalY = ring.centerY + Math.sin(spiralAngle) * originalRadius;
-                
-                const dx = originalX - centerX;
-                const dy = originalY - centerY;
-                const rotatedX = dx * cosRot - dy * sinRot;
-                const rotatedY = dx * sinRot + dy * cosRot;
-                const x = centerX + rotatedX;
-                const y = centerY + rotatedY;
-                
-                if (i === segmentStartSample) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
-            }
-            ctx.stroke();
         }
+    } else {
+        // Generic fallback - draw dots for all recorded samples
+        // 优化：所有花瓣同时绘制，每个花瓣从自己的起点持续绘制到终点
+        // 所有segment同时开始，使用相同的样本数据，从0持续绘制到actualSamplesToDraw
+        const baseVar = 40 * baseHeightRatio;
+        const voiceVar = 40 * voiceHeightRatio;
         
-        // Move to next segment position (with gap)
-        currentAngle += ring.segmentAngleSize + ring.gapSize;
+        // 外层循环：遍历样本位置（所有segment共享相同的进度）
+        for (let posInSegment = 0; posInSegment < actualSamplesToDraw; posInSegment++) {
+            // 所有segment使用相同的样本索引（克隆体模式）
+            const sampleIdx = posInSegment;
+            const amplitude = ring.samples[sampleIdx] || 0;
+            if (amplitude < 0.05) continue;
+            
+            // 内层循环：同时绘制所有segment（花瓣）
+            for (let segmentIdx = 0; segmentIdx < numSegments; segmentIdx++) {
+                // Calculate segment angles (pre-calculate for efficiency)
+                const segmentStartAngle = circleParams.globalRotation + segmentIdx * (segmentAngleSize + gapSize);
+                const segmentMidAngle = segmentStartAngle + segmentAngleSize * 0.5;
+                const centerX = config.centerX + Math.cos(segmentMidAngle) * baseRadius;
+                const centerY = config.centerY + Math.sin(segmentMidAngle) * baseRadius;
+
+                // Calculate angle（每个segment从自己的起点开始绘制）
+                // t基于固定的maxSamplesPerSegment计算，而不是基于动态的actualSamplesToDraw
+                const t = posInSegment / maxSamplesPerSegment;
+                const angle = segmentStartAngle + t * segmentAngleSize;
+
+                // Calculate point (基础 + 用户声音)
+                const variation = (baseVar + amplitude * voiceVar) * waveHeightScale;
+                const r = baseRadius + variation;
+                const ox = config.centerX + Math.cos(angle) * r;
+                const oy = config.centerY + Math.sin(angle) * r;
+
+                // Apply self-rotation
+                const dx = ox - centerX;
+                const dy = oy - centerY;
+                const rx = dx * cosRot - dy * sinRot;
+                const ry = dx * sinRot + dy * cosRot;
+                const x = centerX + rx;
+                const y = centerY + ry;
+
+                ctx.fillStyle = getAmplitudeColor(amplitude);
+                ctx.shadowColor = ctx.fillStyle;
+                ctx.shadowBlur = 10;
+
+                ctx.beginPath();
+                ctx.arc(x, y, 2 + amplitude * 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
     }
-    
+
     ctx.shadowBlur = 0;
 }
 

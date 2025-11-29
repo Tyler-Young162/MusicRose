@@ -1,52 +1,59 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Voiceprint Rose</title>
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
     <canvas id="canvas"></canvas>
     <button id="randomizeButton">一键随机</button>
     <div id="recordingPanel">
         <h4>录音刻录</h4>
-        <button id="startRecording">开始录音</button>
-        <button id="stopRecording" disabled>停止录音</button>
+        <button id="requestPermission">申请麦克风权限</button>
+        <button id="startRecording" disabled>按住录音</button>
+        <button id="simulateInput" style="background: linear-gradient(135deg, #00c6ff 0%, #0072ff 100%);">模拟输入</button>
         <div class="control-group">
             <label for="voiceprintStyle">声纹样式:</label>
             <select id="voiceprintStyle" title="选择声纹样式">
-                <option value="gradient-wave">渐变波形（推荐）</option>
-                <option value="spectrum-bars">频谱柱状图</option>
+                <option value="gradient-wave">渐变波形</option>
+                <option value="spectrum-bars" selected>频谱柱状图</option>
                 <option value="glow-particles">发光粒子</option>
                 <option value="smooth-filled">平滑填充</option>
                 <option value="neon-outline">霓虹轮廓</option>
                 <option value="classic-wave">经典波形</option>
             </select>
         </div>
+
         <div class="control-group">
-            <label for="volumeThreshold">音量阈值:</label>
-            <input type="range" id="volumeThreshold" min="0" max="100" step="1" value="20" title="音量阈值">
-            <span class="value-display" id="volumeThresholdValue">20</span>
+            <label for="baseHeightRatio">基础高度占比:</label>
+            <input type="range" id="baseHeightRatio" min="0.1" max="0.8" step="0.05" value="0.15">
+            <span class="value-display" id="baseHeightRatioValue">15%</span>
+            <small style="color: #aaa; display: block; margin-top: 2px;">控制静音时基线高度占比（剩余为用户声音）</small>
         </div>
+
         <div class="layer-controls">
             <label><input type="checkbox" id="showBaseLayer" checked> 显示基础图形</label>
             <label><input type="checkbox" id="showVoiceprintLayer" checked> 显示声纹刻录</label>
+            <label><input type="checkbox" id="showRawWaveforms" checked> 显示原始声波</label>
         </div>
     </div>
     <div id="controlPanel">
         <h3>参数控制面板</h3>
-        
+
         <div class="section">
             <h4>内部4个圆圈</h4>
             <div id="innerCirclesControls"></div>
         </div>
-        
+
         <div class="section">
             <h4>外围花瓣 - 圆5</h4>
             <div id="outerCircle5Controls"></div>
         </div>
-        
+
         <div class="section">
             <h4>外围花瓣 - 圆6</h4>
             <div id="outerCircle6Controls"></div>
@@ -54,4 +61,5 @@
     </div>
     <script src="script.js"></script>
 </body>
+
 </html>

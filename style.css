@@ -1,7 +1,7 @@
 body {
     margin: 0;
     overflow: hidden;
-    background-color: #000; /* Dark background for the neon effect */
+    background: radial-gradient(circle at center, #1a0b14 0%, #000000 100%); /* Subtle Rose Dark Background */
     display: flex;
     justify-content: center;
     align-items: center;
@@ -20,34 +20,34 @@ canvas {
     padding: 12px 24px;
     font-size: 16px;
     font-weight: bold;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #ff0080 0%, #7928ca 100%); /* Neon Rose Gradient */
     color: white;
     border: none;
     border-radius: 8px;
     cursor: pointer;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 4px 12px rgba(255, 0, 128, 0.3);
     z-index: 1001;
     transition: transform 0.2s, box-shadow 0.2s;
 }
 
 #randomizeButton:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 6px 16px rgba(255, 0, 128, 0.5);
 }
 
 #randomizeButton:active {
     transform: translateY(0);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 2px 8px rgba(255, 0, 128, 0.3);
 }
 
 #controlPanel {
     position: fixed;
     top: 10px;
     right: 10px;
-    width: 320px;
+    width: 300px;
     max-height: 90vh;
     overflow-y: auto;
-    background: rgba(30, 30, 30, 0.95);
+    background: rgba(20, 10, 20, 0.85); /* More transparent, rose-tinted */
     color: #fff;
     padding: 15px;
     border-radius: 8px;
