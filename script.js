@@ -8,8 +8,8 @@ const initialRadii = [0.15, 0.22, 0.31, 0.43]; // Circle 1, 2, 3, 4
 const params = {
     // Inner 4 circles - 根据用户给定的默认值
     innerCircles: [
-        { radius: 0.15, offsetX: 0.02, offsetY: -0.02, color: null, waveHeight: 1.0 },   // Circle 1
-        { radius: 0.22, offsetX: 0.045, offsetY: 0.025, color: null, waveHeight: 1.0 }, // Circle 2
+        { radius: 0.15, offsetX: 0.02, offsetY: -0.02, color: null, waveHeight: 0.5 },   // Circle 1
+        { radius: 0.22, offsetX: 0.045, offsetY: 0.025, color: null, waveHeight: 0.5 }, // Circle 2
         { radius: 0.31, offsetX: -0.035, offsetY: 0.025, color: null, waveHeight: 1.0 }, // Circle 3
         { radius: 0.43, offsetX: 0.05, offsetY: 0.04, color: null, waveHeight: 1.0 }   // Circle 4
     ],
@@ -21,7 +21,7 @@ const params = {
         selfRotation: 0.12,
         globalRotation: 0,
         segmentColors: [], // Array of colors for each segment
-        waveHeight: 1.0 // 声波高度缩放因子
+        waveHeight: 2.0 // 声波高度缩放因子
     },
     // Outer circle 6 (segmented petals)
     outerCircle6: {
@@ -31,7 +31,7 @@ const params = {
         selfRotation: 0.12,
         globalRotation: 0.3927,
         segmentColors: [], // Array of colors for each segment
-        waveHeight: 1.0 // 声波高度缩放因子
+        waveHeight: 2.0 // 声波高度缩放因子
     }
 };
 
@@ -72,7 +72,69 @@ const layerVisibility = {
 const voiceprintSettings = {
     style: 'spectrum-bars', // Default to spectrum bars
     showRawWaveforms: true, // Show raw waveforms on left side
-    baseHeightRatio: 0.15 // 基础高度占比（静音时的基线），默认15%，用户声音占85%
+    baseHeightRatio: 0.15, // 基础高度占比（静音时的基线），默认15%，用户声音占85%
+    colorMode: 'romantic-classic' // Default color mode
+};
+
+// Color Palettes Configuration
+const PALETTES = {
+    // Category 1: Romantic Multi-color (Multi-ring)
+    'romantic-classic': {
+        type: 'romantic',
+        rings: ['#8B0000', '#DC143C', '#FF1493', '#FF69B4', '#FFB6C1', '#FFD700'] // Red/Pink/Gold
+    },
+    'romantic-ocean': {
+        type: 'romantic',
+        rings: ['#00008B', '#0000CD', '#4169E1', '#00BFFF', '#87CEEB', '#E0FFFF'] // Deep Blue to Cyan
+    },
+    'romantic-forest': {
+        type: 'romantic',
+        rings: ['#006400', '#008000', '#228B22', '#32CD32', '#90EE90', '#FFD700'] // Green to Gold
+    },
+    'romantic-sunset': {
+        type: 'romantic',
+        rings: ['#4B0082', '#800080', '#8B008B', '#FF00FF', '#FF4500', '#FFD700'] // Purple to Orange/Gold
+    },
+
+    // Category 2: Gradient Mode (Uniform Gradient)
+    'gradient-pinkgold': {
+        type: 'gradient',
+        start: { h: 330, s: 100, l: 80 }, // Pink
+        end: { h: 50, s: 100, l: 60 }     // Gold
+    },
+    'gradient-fire': {
+        type: 'gradient',
+        start: { h: 0, s: 100, l: 50 },   // Red
+        end: { h: 60, s: 100, l: 60 }     // Yellow
+    },
+    'gradient-cool': {
+        type: 'gradient',
+        start: { h: 270, s: 100, l: 60 }, // Purple
+        end: { h: 180, s: 100, l: 60 }    // Cyan
+    },
+    'gradient-neon': {
+        type: 'gradient',
+        start: { h: 200, s: 100, l: 60 }, // Blue
+        end: { h: 300, s: 100, l: 60 }    // Pink
+    },
+
+    // Category 3: Monochrome Mode (Single Color)
+    'monochrome-red': {
+        type: 'monochrome',
+        h: 345, s: 90, l: 60
+    },
+    'monochrome-blue': {
+        type: 'monochrome',
+        h: 220, s: 90, l: 60
+    },
+    'monochrome-gold': {
+        type: 'monochrome',
+        h: 45, s: 90, l: 60
+    },
+    'monochrome-purple': {
+        type: 'monochrome',
+        h: 270, s: 90, l: 60
+    }
 };
 
 // Generate random rainbow color
@@ -116,6 +178,32 @@ function initializeColors() {
     for (let i = 0; i < params.outerCircle6.segmentCount; i++) {
         params.outerCircle6.segmentColors.push(getRandomRainbowColor());
     }
+}
+
+function drawFPS() {
+    const now = performance.now();
+    fps.frameCount++;
+
+    if (now - fps.lastTime >= 1000) {
+        fps.value = fps.frameCount;
+        fps.frameCount = 0;
+        fps.lastTime = now;
+    }
+
+    ctx.save();
+    ctx.font = '14px monospace';
+    ctx.fillStyle = '#00ff00';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(`FPS: ${fps.value}`, 10, 10);
+
+    // Debug: Show current color mode
+    const palette = PALETTES[voiceprintSettings.colorMode];
+    const paletteType = palette ? palette.type : 'unknown';
+    ctx.fillStyle = '#ffff00';
+    ctx.fillText(`Color: ${voiceprintSettings.colorMode} (${paletteType})`, 10, 30);
+
+    ctx.restore();
 }
 
 function init() {
@@ -602,8 +690,8 @@ function drawSegmentedCircle(circleNumber, circleParams) {
     let currentAngle = circleParams.globalRotation;
 
     for (let i = 0; i < numSegments; i++) {
-        // Get color for this segment
-        const segmentColor = circleParams.segmentColors[i] || 'white';
+        // Get color for this segment from palette
+        const segmentColor = getBaseLayerColor(4 + (circleNumber - 5)); // ringIndex 4 for circle 5, 5 for circle 6
         ctx.strokeStyle = segmentColor;
         ctx.lineWidth = 2;
 
@@ -708,7 +796,7 @@ function drawRawWaveforms() {
                 const voiceHeightRatio = 1.0 - baseHeightRatio;
                 const baseHeight = waveformHeight * 0.1 * baseHeightRatio; // 基础高度
                 const voiceHeight = waveformHeight * 0.8 * voiceHeightRatio; // 用户声音高度
-                
+
                 // 获取当前圆圈的声波高度缩放因子
                 let waveHeightScale = 1.0;
                 if (ringIndex < 4) {
@@ -753,10 +841,10 @@ function draw() {
 
     // Draw base layer (circles and segments)
     if (layerVisibility.showBaseLayer) {
-        // Draw the 4 nested circles with rainbow colors
+        // Draw the 4 nested circles with colors from palette
         const fourCircles = calculateFourCircles();
         fourCircles.forEach((circle, index) => {
-            const color = params.innerCircles[index].color || 'white';
+            const color = getBaseLayerColor(index);
             drawCircleOutline(circle.cx, circle.cy, circle.radius, color);
         });
 
@@ -878,6 +966,18 @@ function setupRecordingControls() {
     if (rawWaveCheck) {
         rawWaveCheck.addEventListener('change', (e) => {
             voiceprintSettings.showRawWaveforms = e.target.checked;
+            draw();
+        });
+    }
+
+    // Color Mode Selector
+    const colorModeSelect = document.getElementById('colorMode');
+    if (colorModeSelect) {
+        colorModeSelect.addEventListener('change', (e) => {
+            voiceprintSettings.colorMode = e.target.value;
+            console.log('🎨 Color mode changed to:', e.target.value);
+            console.log('🎨 Palette:', PALETTES[e.target.value]);
+            // Force redraw immediately
             draw();
         });
     }
@@ -1116,18 +1216,18 @@ function recordAudioData() {
     // - 中频 (1000-4000Hz): 部分辅音
     // - 高频 (4000-22050Hz): 清音、辅音，能量小但重要
     // 使用加权平均，给高频更高的权重，避免被低频淹没
-    
+
     const sampleRate = audioContext ? audioContext.sampleRate : 44100;
     const nyquist = sampleRate / 2; // 奈奎斯特频率
     const binWidth = nyquist / dataArray.length; // 每个bin的频率宽度
-    
+
     let weightedSum = 0;
     let weightSum = 0;
-    
+
     for (let i = 0; i < dataArray.length; i++) {
         const frequency = i * binWidth; // 当前bin对应的频率
         const amplitude = dataArray[i] / 255; // 归一化到 0-1
-        
+
         // 计算权重：频率越高，权重越大（指数增长）
         // 低频(0-1000Hz): 权重 1.0
         // 中频(1000-4000Hz): 权重 1.0-2.5
@@ -1141,12 +1241,12 @@ function recordAudioData() {
             // 高频：继续增长
             weight = 2.5 + (frequency - 4000) / (nyquist - 4000) * 2.5;
         }
-        
+
         // 使用 RMS (均方根) 而不是简单平均，更好地反映能量
         weightedSum += amplitude * amplitude * weight;
         weightSum += weight;
     }
-    
+
     // RMS 计算：sqrt(加权平均)
     const rmsAmplitude = Math.sqrt(weightedSum / weightSum);
     const normalizedAmplitude = Math.min(1.0, rmsAmplitude * 1.5); // 稍微放大，增强响应
@@ -1155,7 +1255,7 @@ function recordAudioData() {
     // 每个圈从前一圈的25%时开始，但都画完整的100%
     // 为了加快录制速度，每帧录制3个样本（速度快1.5倍，平衡性能和效果）
     const samplesPerFrame = 3; // 每帧录制的样本数（3倍速度）
-    
+
     for (let i = 0; i < samplesPerFrame; i++) {
         voiceprintData.rings.forEach((ring, ringIndex) => {
             // 检查当前全局索引是否达到该圈的起始索引
@@ -1228,30 +1328,68 @@ function drawVoiceprint() {
 }
 
 // Helper: Get color based on amplitude (Neon Rose Palette)
-function getAmplitudeColor(amplitude) {
-    // Neon Rose Gradient
-    // Low: Deep Pink/Magenta (300-340)
-    // Mid: Bright Red (350-10)
-    // High: Gold/White (40-60)
+let lastLoggedMode = null;
+function getAmplitudeColor(amplitude, ringIndex = 0) {
+    const modeKey = voiceprintSettings.colorMode;
+    const palette = PALETTES[modeKey] || PALETTES['romantic-classic']; // Fallback
+    const type = palette.type;
 
-    let h, s, l;
-
-    if (amplitude < 0.6) {
-        // Deep Magenta (300) to Red-Pink (350)
-        const t = amplitude / 0.6;
-        h = 300 + t * 50;
-        s = 80 + t * 20;
-        l = 40 + t * 20;
-    } else {
-        // Red-Pink (350) to Gold (50) (crossing 360)
-        const t = (amplitude - 0.6) / 0.4;
-        // Map 350 -> 410 (which is 50)
-        h = 350 + t * 60;
-        s = 100;
-        l = 60 + t * 40; // Bloom to white
+    // Debug: Log once per mode change
+    if (lastLoggedMode !== modeKey) {
+        console.log(`🎨 getAmplitudeColor called with mode: ${modeKey}, type: ${type}, ringIndex: ${ringIndex}`);
+        lastLoggedMode = modeKey;
     }
 
-    return `hsl(${h % 360}, ${s}%, ${l}%)`;
+    if (type === 'romantic') {
+        // Romantic Multi-color: Base color from palette + amplitude modulation
+        const rings = palette.rings;
+        // Use ringIndex to pick color, cycle if needed
+        const baseColorHex = rings[ringIndex % rings.length];
+
+        // Simple lightening for high amplitude
+        // Note: For true "romantic" feel, we might want to keep colors stable or just brighten slightly.
+        return baseColorHex;
+    } else if (type === 'gradient') {
+        // Gradient: Interpolate based on amplitude
+        const start = palette.start;
+        const end = palette.end;
+
+        const t = amplitude;
+        const h = start.h + (end.h - start.h) * t;
+        const s = start.s + (end.s - start.s) * t;
+        const l = start.l + (end.l - start.l) * t;
+
+        return `hsl(${h}, ${s}%, ${l}%)`;
+    } else if (type === 'monochrome') {
+        // Monochrome: Fixed Hue, modulate Lightness
+        const base = palette;
+        // Higher amplitude -> Lighter/Brighter
+        const l = base.l + amplitude * 30;
+        return `hsl(${base.h}, ${base.s}%, ${Math.min(100, l)}%)`;
+    }
+
+    return 'white'; // Should not happen
+}
+
+// Helper: Get base layer color (for outline circles)
+function getBaseLayerColor(ringIndex) {
+    const modeKey = voiceprintSettings.colorMode;
+    const palette = PALETTES[modeKey] || PALETTES['romantic-classic'];
+    const type = palette.type;
+
+    if (type === 'romantic') {
+        // Return the color for this ring
+        const rings = palette.rings;
+        return rings[ringIndex % rings.length];
+    } else if (type === 'gradient') {
+        // For gradient mode, use the start color for all base layers
+        const start = palette.start;
+        return `hsl(${start.h}, ${start.s}%, ${start.l}%)`;
+    } else if (type === 'monochrome') {
+        // For monochrome, use the base color
+        return `hsl(${palette.h}, ${palette.s}%, ${palette.l}%)`;
+    }
+    return 'white';
 }
 
 // Helper: Smooth interpolation between points
@@ -1322,8 +1460,8 @@ function drawCircleVoiceprint(ring, ringIndex, maxSamples) {
             // but let's try to be smoother if possible. 
             // Given the structure, drawing small segments is necessary for color gradients.
 
-            ctx.strokeStyle = getAmplitudeColor(amplitude);
-            ctx.shadowColor = getAmplitudeColor(amplitude);
+            ctx.strokeStyle = getAmplitudeColor(amplitude, ringIndex);
+            ctx.shadowColor = getAmplitudeColor(amplitude, ringIndex);
             ctx.beginPath();
             ctx.moveTo(x1, y1);
             ctx.lineTo(x2, y2);
@@ -1346,8 +1484,8 @@ function drawCircleVoiceprint(ring, ringIndex, maxSamples) {
             const x2 = centerX + Math.cos(nextAngle) * r2;
             const y2 = centerY + Math.sin(nextAngle) * r2;
 
-            ctx.strokeStyle = getAmplitudeColor(amplitude);
-            ctx.shadowColor = getAmplitudeColor(amplitude);
+            ctx.strokeStyle = getAmplitudeColor(amplitude, ringIndex);
+            ctx.shadowColor = getAmplitudeColor(amplitude, ringIndex);
             ctx.beginPath();
             ctx.moveTo(x1, y1);
             ctx.lineTo(x2, y2);
@@ -1358,8 +1496,8 @@ function drawCircleVoiceprint(ring, ringIndex, maxSamples) {
         // Spectrum bars for standard circles with gradient colors
         ctx.shadowBlur = 3; // 降低阴影模糊度以提升性能（从8降到3）
 
-        // Get base color for this circle
-        const baseColor = params.innerCircles[ringIndex].color || 'white';
+        // Get base color for this circle from palette
+        const baseColor = getBaseLayerColor(ringIndex);
 
         // Calculate dynamic bar width based on circumference to ensure consistent density
         // Outer circles (larger radius) will have wider bars
@@ -1371,15 +1509,15 @@ function drawCircleVoiceprint(ring, ringIndex, maxSamples) {
         // 计算基础高度和用户声音高度的占比
         const baseHeightRatio = voiceprintSettings.baseHeightRatio; // 基础高度占比（默认0.4）
         const voiceHeightRatio = 1.0 - baseHeightRatio; // 用户声音高度占比（默认0.6）
-        
+
         // 总高度基准值（相当于原来的60）
         const totalHeightBase = 60;
         const baseHeight = totalHeightBase * baseHeightRatio; // 基础高度（静音时）
         const voiceHeight = totalHeightBase * voiceHeightRatio; // 用户声音高度（最大）
-        
+
         // 获取当前圆圈的声波高度缩放因子
         const waveHeightScale = params.innerCircles[ringIndex].waveHeight || 1.0;
-        
+
         // 性能优化：预计算固定值，避免在循环中重复计算
         const baseColorDark = getGradientColor(baseColor, 0);
         ctx.shadowColor = baseColor;
@@ -1434,7 +1572,7 @@ function drawCircleVoiceprint(ring, ringIndex, maxSamples) {
         ctx.shadowBlur = 5; // 降低阴影模糊度以提升性能（从10降到5） // 降低阴影模糊度以提升性能（从20降到10）
         const particleCount = Math.min(80, maxSamples);
         const step = Math.floor(maxSamples / particleCount);
-        
+
         // 获取当前圆圈的声波高度缩放因子
         const waveHeightScale = params.innerCircles[ringIndex].waveHeight || 1.0;
         // 计算基础高度和用户声音高度的占比
@@ -1454,7 +1592,7 @@ function drawCircleVoiceprint(ring, ringIndex, maxSamples) {
             const x = centerX + Math.cos(angle) * r;
             const y = centerY + Math.sin(angle) * r;
 
-            const color = getAmplitudeColor(amplitude);
+            const color = getAmplitudeColor(amplitude, ringIndex);
             ctx.fillStyle = color;
             ctx.shadowColor = color;
 
@@ -1466,7 +1604,7 @@ function drawCircleVoiceprint(ring, ringIndex, maxSamples) {
     } else {
         // Generic fallback for other styles
         ctx.shadowBlur = 5; // 降低阴影模糊度以提升性能（从10降到5）
-        
+
         // 获取当前圆圈的声波高度缩放因子
         const waveHeightScale = params.innerCircles[ringIndex].waveHeight || 1.0;
         // 计算基础高度和用户声音高度的占比
@@ -1485,7 +1623,7 @@ function drawCircleVoiceprint(ring, ringIndex, maxSamples) {
             const x = centerX + Math.cos(angle) * r;
             const y = centerY + Math.sin(angle) * r;
 
-            ctx.fillStyle = getAmplitudeColor(amplitude);
+            ctx.fillStyle = getAmplitudeColor(amplitude, ringIndex);
             ctx.shadowColor = ctx.fillStyle;
 
             const size = 2 + amplitude * 3;
@@ -1523,7 +1661,7 @@ function drawSegmentedVoiceprint(ring, ringIndex, maxSamples) {
 
     const cosRot = Math.cos(circleParams.selfRotation);
     const sinRot = Math.sin(circleParams.selfRotation);
-    
+
     // 获取当前圆圈的声波高度缩放因子
     const waveHeightScale = circleParams.waveHeight || 1.0;
     // 计算基础高度和用户声音高度的占比
@@ -1539,14 +1677,20 @@ function drawSegmentedVoiceprint(ring, ringIndex, maxSamples) {
 
         // 优化：所有花瓣同时绘制，每个花瓣从自己的起点持续绘制到终点
         // 所有segment同时开始，使用相同的样本数据，从0持续绘制到actualSamplesToDraw
-        
+
         // 外层循环：遍历样本位置（所有segment共享相同的进度）
         for (let posInSegment = 0; posInSegment < actualSamplesToDraw - 1; posInSegment++) {
             // 所有segment使用相同的样本索引（克隆体模式）
             const sampleIdx = posInSegment;
             const amplitude1 = ring.samples[sampleIdx] || 0;
             const amplitude2 = ring.samples[sampleIdx + 1] || 0;
-            
+            const avgAmplitude = (amplitude1 + amplitude2) / 2;
+
+            // 优化：在此处设置样式，因为同一时刻所有花瓣颜色相同
+            ctx.strokeStyle = getAmplitudeColor(avgAmplitude, ringIndex);
+            ctx.shadowColor = getAmplitudeColor(avgAmplitude, ringIndex);
+            ctx.beginPath();
+
             // 内层循环：同时绘制所有segment（花瓣）
             for (let segmentIdx = 0; segmentIdx < numSegments; segmentIdx++) {
                 // Calculate segment angles (pre-calculate for efficiency)
@@ -1588,15 +1732,10 @@ function drawSegmentedVoiceprint(ring, ringIndex, maxSamples) {
                 const x2 = centerX + rx2;
                 const y2 = centerY + ry2;
 
-                const avgAmplitude = (amplitude1 + amplitude2) / 2;
-                ctx.strokeStyle = getAmplitudeColor(avgAmplitude);
-                ctx.shadowColor = getAmplitudeColor(avgAmplitude);
-
-                ctx.beginPath();
                 ctx.moveTo(x1, y1);
                 ctx.lineTo(x2, y2);
-                ctx.stroke();
             }
+            ctx.stroke();
         }
     } else if (style === 'spectrum-bars') {
         ctx.shadowBlur = 3; // 降低阴影模糊度以提升性能（从8降到3）
@@ -1612,25 +1751,25 @@ function drawSegmentedVoiceprint(ring, ringIndex, maxSamples) {
         // 计算基础高度和用户声音高度的占比
         const baseHeightRatio = voiceprintSettings.baseHeightRatio; // 基础高度占比（默认0.15）
         const voiceHeightRatio = 1.0 - baseHeightRatio; // 用户声音高度占比（默认0.85）
-        
+
         // 总高度基准值（相当于原来的60）
         const totalHeightBase = 60;
         const baseHeight = totalHeightBase * baseHeightRatio; // 基础高度（静音时）
         const voiceHeight = totalHeightBase * voiceHeightRatio; // 用户声音高度（最大）
-        
+
         // 获取当前圆圈的声波高度缩放因子
         const waveHeightScale = circleParams.waveHeight || 1.0;
-        
+
         // 性能优化：预计算所有segment的固定值
         const segmentCache = [];
         for (let segmentIdx = 0; segmentIdx < numSegments; segmentIdx++) {
-            const baseColor = circleParams.segmentColors[segmentIdx] || 'white';
+            const baseColor = getBaseLayerColor(ringIndex);
             const segmentStartAngle = circleParams.globalRotation + segmentIdx * (segmentAngleSize + gapSize);
             const segmentMidAngle = segmentStartAngle + segmentAngleSize * 0.5;
             const centerX = config.centerX + Math.cos(segmentMidAngle) * baseRadius;
             const centerY = config.centerY + Math.sin(segmentMidAngle) * baseRadius;
             const baseColorDark = getGradientColor(baseColor, 0);
-            
+
             segmentCache.push({
                 baseColor,
                 baseColorDark,
@@ -1642,23 +1781,23 @@ function drawSegmentedVoiceprint(ring, ringIndex, maxSamples) {
 
         // 优化：所有花瓣同时绘制，每个花瓣从自己的起点持续绘制到终点
         // 所有segment同时开始，使用相同的样本数据，从0持续绘制到actualSamplesToDraw
-        
+
         // 外层循环：遍历样本位置（所有segment共享相同的进度）
         for (let posInSegment = 0; posInSegment < actualSamplesToDraw; posInSegment++) {
             // 所有segment使用相同的样本索引（克隆体模式）
             const sampleIdx = posInSegment;
             const amplitude = ring.samples[sampleIdx] || 0;
-            
+
             // 预计算t值（所有segment共享）
             const t = posInSegment / maxSamplesPerSegment;
-            
+
             // 内层循环：同时绘制所有segment（花瓣）
             for (let segmentIdx = 0; segmentIdx < numSegments; segmentIdx++) {
                 const cache = segmentCache[segmentIdx];
-                
+
                 // Calculate angle for this position（每个segment从自己的起点开始绘制）
                 const angle = cache.segmentStartAngle + t * segmentAngleSize;
-                
+
                 // 预计算三角函数
                 const cosA = Math.cos(angle);
                 const sinA = Math.sin(angle);
@@ -1704,7 +1843,7 @@ function drawSegmentedVoiceprint(ring, ringIndex, maxSamples) {
                 } else {
                     ctx.fillStyle = cache.baseColorDark;
                 }
-                
+
                 ctx.shadowColor = cache.baseColor;
 
                 ctx.beginPath();
@@ -1722,14 +1861,14 @@ function drawSegmentedVoiceprint(ring, ringIndex, maxSamples) {
         // 所有segment同时开始，使用相同的样本数据，从0持续绘制到actualSamplesToDraw
         const baseVar = 40 * baseHeightRatio;
         const voiceVar = 40 * voiceHeightRatio;
-        
+
         // 外层循环：遍历样本位置（所有segment共享相同的进度）
         for (let posInSegment = 0; posInSegment < actualSamplesToDraw; posInSegment++) {
             // 所有segment使用相同的样本索引（克隆体模式）
             const sampleIdx = posInSegment;
             const amplitude = ring.samples[sampleIdx] || 0;
             if (amplitude < 0.05) continue;
-            
+
             // 内层循环：同时绘制所有segment（花瓣）
             for (let segmentIdx = 0; segmentIdx < numSegments; segmentIdx++) {
                 // Calculate segment angles (pre-calculate for efficiency)

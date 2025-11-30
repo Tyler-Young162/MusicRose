@@ -29,6 +29,30 @@
         </div>
 
         <div class="control-group">
+            <label for="colorMode">配色方案:</label>
+            <select id="colorMode" title="选择配色方案">
+                <optgroup label="浪漫多色 (Romantic)">
+                    <option value="romantic-classic" selected>经典玫瑰 (Classic Red)</option>
+                    <option value="romantic-ocean">海洋之心 (Ocean Blue)</option>
+                    <option value="romantic-forest">森林秘境 (Forest Green)</option>
+                    <option value="romantic-sunset">落日余晖 (Sunset Purple)</option>
+                </optgroup>
+                <optgroup label="单色渐变 (Gradient)">
+                    <option value="gradient-pinkgold">粉金渐变 (Pink-Gold)</option>
+                    <option value="gradient-fire">烈焰红唇 (Red-Yellow)</option>
+                    <option value="gradient-cool">极光炫彩 (Purple-Cyan)</option>
+                    <option value="gradient-neon">赛博霓虹 (Neon Blue-Pink)</option>
+                </optgroup>
+                <optgroup label="纯色经典 (Monochrome)">
+                    <option value="monochrome-red">经典红 (Red)</option>
+                    <option value="monochrome-blue">宝石蓝 (Blue)</option>
+                    <option value="monochrome-gold">奢华金 (Gold)</option>
+                    <option value="monochrome-purple">神秘紫 (Purple)</option>
+                </optgroup>
+            </select>
+        </div>
+
+        <div class="control-group">
             <label for="baseHeightRatio">基础高度占比:</label>
             <input type="range" id="baseHeightRatio" min="0.1" max="0.8" step="0.05" value="0.15">
             <span class="value-display" id="baseHeightRatioValue">15%</span>
