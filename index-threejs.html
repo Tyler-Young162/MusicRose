@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voiceprint Rose - Three.js Version</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+
+<body>
+    <div id="canvas-container"></div>
+    <button id="randomizeButton">一键随机</button>
+    <div id="recordingPanel">
+        <h4>录音刻录</h4>
+        <button id="requestPermission">申请麦克风权限</button>
+        <button id="startRecording" disabled>按住录音</button>
+        <button id="simulateInput" style="background: linear-gradient(135deg, #00c6ff 0%, #0072ff 100%);">模拟输入</button>
+        <div class="control-group">
+            <label for="voiceprintStyle">声纹样式:</label>
+            <select id="voiceprintStyle" title="选择声纹样式">
+                <option value="gradient-wave">渐变波形</option>
+                <option value="spectrum-bars" selected>频谱柱状图</option>
+                <option value="glow-particles">发光粒子</option>
+                <option value="smooth-filled">平滑填充</option>
+                <option value="neon-outline">霓虹轮廓</option>
+                <option value="classic-wave">经典波形</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label for="colorMode">配色方案:</label>
+            <select id="colorMode" title="选择配色方案">
+                <optgroup label="浪漫多色 (Romantic)">
+                    <option value="romantic-classic" selected>经典玫瑰 (Classic Red)</option>
+                    <option value="romantic-ocean">海洋之心 (Ocean Blue)</option>
+                    <option value="romantic-forest">森林秘境 (Forest Green)</option>
+                    <option value="romantic-sunset">落日余晖 (Sunset Purple)</option>
+                </optgroup>
+                <optgroup label="单色渐变 (Gradient)">
+                    <option value="gradient-pinkgold">粉金渐变 (Pink-Gold)</option>
+                    <option value="gradient-fire">烈焰红唇 (Red-Yellow)</option>
+                    <option value="gradient-cool">极光炫彩 (Purple-Cyan)</option>
+                    <option value="gradient-neon">赛博霓虹 (Neon Blue-Pink)</option>
+                </optgroup>
+                <optgroup label="纯色经典 (Monochrome)">
+                    <option value="monochrome-red">经典红 (Red)</option>
+                    <option value="monochrome-blue">宝石蓝 (Blue)</option>
+                    <option value="monochrome-gold">奢华金 (Gold)</option>
+                    <option value="monochrome-purple">神秘紫 (Purple)</option>
+                </optgroup>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label for="baseHeightRatio">基础高度占比:</label>
+            <input type="range" id="baseHeightRatio" min="0.1" max="0.8" step="0.05" value="0.15">
+            <span class="value-display" id="baseHeightRatioValue">15%</span>
+            <small style="color: #aaa; display: block; margin-top: 2px;">控制静音时基线高度占比（剩余为用户声音）</small>
+        </div>
+
+        <div class="layer-controls">
+            <label><input type="checkbox" id="showBaseLayer" checked> 显示基础图形</label>
+            <label><input type="checkbox" id="showVoiceprintLayer" checked> 显示声纹刻录</label>
+            <label><input type="checkbox" id="showRawWaveforms" checked> 显示原始声波</label>
+        </div>
+    </div>
+    <div id="controlPanel">
+        <h3>参数控制面板</h3>
+
+        <div class="section">
+            <h4>内部4个圆圈</h4>
+            <div id="innerCirclesControls"></div>
+        </div>
+
+        <div class="section">
+            <h4>外围花瓣 - 圆5</h4>
+            <div id="outerCircle5Controls"></div>
+        </div>
+
+        <div class="section">
+            <h4>外围花瓣 - 圆6</h4>
+            <div id="outerCircle6Controls"></div>
+        </div>
+    </div>
+    <div id="debugPanel" style="position: fixed; bottom: 10px; left: 10px; background: rgba(0,0,0,0.8); color: #0f0; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 11px; max-width: 400px; max-height: 300px; overflow-y: auto; z-index: 2000; display: none;">
+        <div style="margin-bottom: 5px; font-weight: bold;">调试信息 (按 D 键显示/隐藏)</div>
+        <div id="debugContent"></div>
+    </div>
+    <script src="script-threejs.js"></script>
+</body>
+
+</html>
+
