@@ -10,12 +10,28 @@
 
 <body>
     <canvas id="canvas"></canvas>
-    <button id="randomizeButton">一键随机</button>
     <div id="recordingPanel">
         <h4>录音刻录</h4>
         <button id="requestPermission">申请麦克风权限</button>
         <button id="startRecording" disabled>按住录音</button>
         <button id="simulateInput" style="background: linear-gradient(135deg, #00c6ff 0%, #0072ff 100%);">模拟输入</button>
+        
+        <div class="state-control-section">
+            <h5>状态控制</h5>
+            <button id="defaultStateButton" class="state-button active">默认状态</button>
+            <button id="bloomStateButton" class="state-button">盛开状态</button>
+            <button id="blossomStateButton" class="state-button">绽放状态</button>
+            <div class="transition-control">
+                <label for="transitionSlider">过渡进度:</label>
+                <input type="range" id="transitionSlider" min="0" max="300" step="1" value="0">
+                <span class="value-display" id="transitionValue">0%</span>
+            </div>
+            <div class="transition-control">
+                <label for="colorTransitionSlider">颜色过渡:</label>
+                <input type="range" id="colorTransitionSlider" min="0" max="100" step="1" value="0">
+                <span class="value-display" id="colorTransitionValue">0%</span>
+            </div>
+        </div>
         <div class="control-group">
             <label for="voiceprintStyle">声纹样式:</label>
             <select id="voiceprintStyle" title="选择声纹样式">
@@ -59,6 +75,13 @@
             <small style="color: #aaa; display: block; margin-top: 2px;">控制静音时基线高度占比（剩余为用户声音）</small>
         </div>
 
+        <div class="control-group">
+            <label for="segmentFadeRatio">分段边缘渐变比例:</label>
+            <input type="range" id="segmentFadeRatio" min="0" max="0.5" step="0.01" value="0.1">
+            <span class="value-display" id="segmentFadeRatioValue">10%</span>
+            <small style="color: #aaa; display: block; margin-top: 2px;">控制分段花瓣开始和结束处的透明度渐变区域（占分段长度的比例）</small>
+        </div>
+
         <div class="layer-controls">
             <label><input type="checkbox" id="showBaseLayer" checked> 显示基础图形</label>
             <label><input type="checkbox" id="showVoiceprintLayer" checked> 显示声纹刻录</label>
@@ -69,8 +92,13 @@
         <h3>参数控制面板</h3>
 
         <div class="section">
-            <h4>内部4个圆圈</h4>
+            <h4>内部3个圆圈</h4>
             <div id="innerCirclesControls"></div>
+        </div>
+
+        <div class="section">
+            <h4>分段花瓣 - 圆4</h4>
+            <div id="innerCircle4Controls"></div>
         </div>
 
         <div class="section">

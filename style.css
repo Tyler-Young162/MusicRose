@@ -13,31 +13,70 @@ canvas {
     display: block;
 }
 
-#randomizeButton {
-    position: fixed;
-    top: 20px;
-    left: 20px;
-    padding: 12px 24px;
-    font-size: 16px;
+.state-control-section {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #555;
+}
+
+.state-control-section h5 {
+    margin: 0 0 10px 0;
+    font-size: 13px;
+    color: #aaa;
+}
+
+.state-button {
+    display: block;
+    width: 100%;
+    padding: 8px 16px;
+    margin-bottom: 8px;
+    font-size: 12px;
     font-weight: bold;
-    background: linear-gradient(135deg, #ff0080 0%, #7928ca 100%); /* Neon Rose Gradient */
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
     border: none;
-    border-radius: 8px;
+    border-radius: 6px;
     cursor: pointer;
-    box-shadow: 0 4px 12px rgba(255, 0, 128, 0.3);
-    z-index: 1001;
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
 }
 
-#randomizeButton:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 16px rgba(255, 0, 128, 0.5);
+.state-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
 }
 
-#randomizeButton:active {
+.state-button.active {
+    background: linear-gradient(135deg, #ff0080 0%, #7928ca 100%);
+    box-shadow: 0 2px 8px rgba(255, 0, 128, 0.4);
+}
+
+.state-button:active {
     transform: translateY(0);
-    box-shadow: 0 2px 8px rgba(255, 0, 128, 0.3);
+}
+
+.transition-control {
+    margin-top: 10px;
+}
+
+.transition-control label {
+    display: block;
+    margin-bottom: 6px;
+    color: #ccc;
+    font-size: 11px;
+}
+
+.transition-control input[type="range"] {
+    width: 100%;
+    margin-bottom: 4px;
+}
+
+.transition-control .value-display {
+    display: inline-block;
+    min-width: 50px;
+    text-align: right;
+    color: #0ff;
+    font-weight: bold;
+    font-size: 12px;
 }
 
 #controlPanel {

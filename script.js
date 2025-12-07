@@ -2,38 +2,182 @@ let canvas, ctx;
 let width, height;
 
 // Initial radius values (reference point for randomization)
-const initialRadii = [0.15, 0.22, 0.31, 0.43]; // Circle 1, 2, 3, 4
+const initialRadii = [0.14, 0.22, 0.32, 0.44]; // Circle 1, 2, 3, 4
 
-// Parameters configuration
-const params = {
-    // Inner 4 circles - 根据用户给定的默认值
+// 默认状态参数
+const defaultState = {
     innerCircles: [
-        { radius: 0.15, offsetX: 0.02, offsetY: -0.02, color: null, waveHeight: 0.5 },   // Circle 1
-        { radius: 0.22, offsetX: 0.045, offsetY: 0.025, color: null, waveHeight: 0.5 }, // Circle 2
-        { radius: 0.31, offsetX: -0.035, offsetY: 0.025, color: null, waveHeight: 1.0 }, // Circle 3
-        { radius: 0.43, offsetX: 0.05, offsetY: 0.04, color: null, waveHeight: 1.0 }   // Circle 4
+        { radius: 0.14, offsetX: 0.025, offsetY: -0.005, waveHeight: 0.5 },   // Circle 1
+        { radius: 0.22, offsetX: 0.045, offsetY: 0.025, waveHeight: 0.5 }, // Circle 2
+        { radius: 0.32, offsetX: -0.01, offsetY: 0.025, waveHeight: 1.0 }, // Circle 3
     ],
+    // Circle 4 - 现在也是分段花瓣形式
+    innerCircle4: {
+        radius: 0.22, // 22.0%
+        offsetX: -0.005, // -0.50%
+        offsetY: 0.0, // 0.00%
+        segmentCount: 1, // 默认1（整圆）
+        segmentLength: 0.0,
+        selfRotation: 0.0,
+        globalRotation: 0.0,
+        waveHeight: 1.0
+    },
+    outerCircle5: {
+        radius: 0.33,
+        segmentCount: 3,
+        segmentLength: 0.02,
+        selfRotation: 0.190,
+        globalRotation: 0,
+        waveHeight: 2.0
+    },
+    outerCircle6: {
+        radius: 0.46,
+        segmentCount: 4,
+        segmentLength: 0.0,
+        selfRotation: 0.120,
+        globalRotation: 0.393,
+        waveHeight: 2.0
+    }
+};
+
+// 盛开状态参数（从新截图提取）
+const bloomState = {
+    innerCircles: [
+        { radius: 0.14, offsetX: 0.025, offsetY: -0.005, waveHeight: 1.0 },   // Circle 1: 半径14.0%, X偏移2.50%, Y偏移-0.50%, 声波高度1.0x
+        { radius: 0.23, offsetX: 0.015, offsetY: 0.04, waveHeight: 1.0 }, // Circle 2: 半径23.0%, X偏移1.50%, Y偏移4.00%, 声波高度1.0x
+        { radius: 0.33, offsetX: -0.005, offsetY: 0.025, waveHeight: 1.5 }, // Circle 3: 半径33.0%, X偏移-0.50%, Y偏移2.50%, 声波高度1.5x
+    ],
+    // Circle 4 - 现在也是分段花瓣形式
+    innerCircle4: {
+        radius: 0.23, // 23.0%
+        offsetX: -0.01, // -1.00%
+        offsetY: 0.01, // 1.00%
+        segmentCount: 3, // 分段数量: 3
+        segmentLength: 0.03, // 3.0% (实际: 34.3%)
+        selfRotation: 0.160, // 0.160
+        globalRotation: 2.380, // 2.380
+        waveHeight: 2.0 // 2.0x
+    },
+    outerCircle5: {
+        radius: 0.35, // 半径35.0%
+        segmentCount: 4, // 分段数量: 4
+        segmentLength: 0.02, // 每段长度变化比例: 2.0%
+        selfRotation: 0.280, // 自旋角: 0.280弧度
+        globalRotation: 0.280, // 整体旋转角: 0.280弧度
+        waveHeight: 2.5 // 声波高度: 2.5x
+    },
+    outerCircle6: {
+        radius: 0.55, // 半径55.0%
+        segmentCount: 5, // 分段数量: 5
+        segmentLength: 0.04, // 每段长度变化比例: 4.0%
+        selfRotation: 0.170, // 自旋角: 0.170弧度
+        globalRotation: 0.790, // 整体旋转角: 0.790弧度
+        waveHeight: 2.5 // 声波高度: 2.5x
+    }
+};
+
+// 绽放状态参数（从三个截图提取）
+const blossomState = {
+    innerCircles: [
+        { radius: 0.14, offsetX: 0.025, offsetY: -0.005, waveHeight: 1.1 },   // Circle 1: 半径14.0%, X偏移2.50%, Y偏移-0.50%, 声波高度1.1x
+        { radius: 0.23, offsetX: 0.015, offsetY: 0.04, waveHeight: 1.2 }, // Circle 2: 半径23.0%, X偏移1.50%, Y偏移4.00%, 声波高度1.2x
+        { radius: 0.33, offsetX: -0.005, offsetY: 0.025, waveHeight: 1.9 }, // Circle 3: 半径33.0%, X偏移-0.50%, Y偏移2.50%, 声波高度1.9x
+    ],
+    // Circle 4 - 分段花瓣形式
+    innerCircle4: {
+        radius: 0.23, // 23.0%
+        offsetX: -0.01, // -1.00%
+        offsetY: 0.01, // 1.00%
+        segmentCount: 3, // 分段数量: 3
+        segmentLength: 0.03, // 3.0% (实际: 34.3%)
+        selfRotation: 0.160, // 0.160
+        globalRotation: 2.380, // 2.380
+        waveHeight: 2.5 // 2.5x
+    },
+    outerCircle5: {
+        radius: 0.36, // 半径36.0%
+        segmentCount: 4, // 分段数量: 4
+        segmentLength: 0.02, // 每段长度变化比例: 2.0%
+        selfRotation: 0.300, // 自旋角: 0.300弧度
+        globalRotation: 0.780, // 整体旋转角: 0.780弧度
+        waveHeight: 2.5 // 声波高度: 2.5x
+    },
+    outerCircle6: {
+        radius: 0.56, // 半径56.0%
+        segmentCount: 5, // 分段数量: 5
+        segmentLength: 0.04, // 每段长度变化比例: 4.0%
+        selfRotation: 0.340, // 自旋角: 0.340弧度
+        globalRotation: 0.790, // 整体旋转角: 0.790弧度
+        waveHeight: 2.5 // 声波高度: 2.5x
+    }
+};
+
+// Parameters configuration (当前使用的参数，会在过渡时插值)
+const params = {
+    // Inner 3 circles (Circle 1, 2, 3)
+    innerCircles: [
+        { radius: 0.14, offsetX: 0.025, offsetY: -0.005, color: null, waveHeight: 0.5 },   // Circle 1
+        { radius: 0.22, offsetX: 0.045, offsetY: 0.025, color: null, waveHeight: 0.5 }, // Circle 2
+        { radius: 0.32, offsetX: -0.01, offsetY: 0.025, color: null, waveHeight: 1.0 }, // Circle 3
+    ],
+    // Circle 4 - 现在也是分段花瓣形式
+    innerCircle4: {
+        radius: 0.22, // 22.0%
+        offsetX: -0.005, // -0.50%
+        offsetY: 0.0, // 0.00%
+        segmentCount: 1, // 默认1（整圆）
+        segmentLength: 0.0,
+        selfRotation: 0.0,
+        globalRotation: 0.0,
+        segmentColors: [], // Array of colors for each segment
+        waveHeight: 1.0
+    },
     // Outer circle 5 (segmented petals)
     outerCircle5: {
         radius: 0.33,
-        segmentCount: 4,
-        segmentLength: 0.0,
-        selfRotation: 0.12,
+        segmentCount: 3,
+        segmentLength: 0.02,
+        selfRotation: 0.190,
         globalRotation: 0,
         segmentColors: [], // Array of colors for each segment
-        waveHeight: 2.0 // 声波高度缩放因子
+        waveHeight: 2.0
     },
     // Outer circle 6 (segmented petals)
     outerCircle6: {
-        radius: 0.44,
+        radius: 0.46,
         segmentCount: 4,
         segmentLength: 0.0,
-        selfRotation: 0.12,
-        globalRotation: 0.3927,
+        selfRotation: 0.120,
+        globalRotation: 0.393,
         segmentColors: [], // Array of colors for each segment
-        waveHeight: 2.0 // 声波高度缩放因子
+        waveHeight: 2.0
     }
 };
+
+// 过渡进度 (0 = 默认状态, 100 = 盛开状态, 200 = 绽放状态)
+let transitionProgress = 0;
+
+// 颜色过渡进度 (0-100，循环切换所有配色方案)
+let colorTransitionProgress = 0;
+
+// 分段花瓣边缘渐变比例 (0-0.5，表示渐变区域占分段长度的比例)
+let segmentFadeRatio = 0.1; // 默认10%
+
+// 所有配色方案的列表（按顺序）
+const COLOR_PALETTE_ORDER = [
+    'romantic-classic',
+    'romantic-ocean',
+    'romantic-forest',
+    'romantic-sunset',
+    'gradient-pinkgold',
+    'gradient-fire',
+    'gradient-cool',
+    'gradient-neon',
+    'monochrome-red',
+    'monochrome-blue',
+    'monochrome-gold',
+    'monochrome-purple'
+];
 
 // Base configuration
 const config = {
@@ -97,25 +241,27 @@ const PALETTES = {
     },
 
     // Category 2: Gradient Mode (Uniform Gradient)
+    // 单色渐变：以主色为主，搭配色相相近、明暗对比的颜色
+    // 深色在中心(start)，明亮色在外围(end)
     'gradient-pinkgold': {
         type: 'gradient',
-        start: { h: 330, s: 100, l: 80 }, // Pink
-        end: { h: 50, s: 100, l: 60 }     // Gold
+        start: { h: 330, s: 90, l: 35 },  // 深粉/玫瑰红 (中心，深色)
+        end: { h: 340, s: 100, l: 85 }     // 浅粉/粉金 (外围，明亮)
     },
     'gradient-fire': {
         type: 'gradient',
-        start: { h: 0, s: 100, l: 50 },   // Red
-        end: { h: 60, s: 100, l: 60 }     // Yellow
+        start: { h: 0, s: 100, l: 30 },   // 深红/暗红 (中心，深色)
+        end: { h: 10, s: 100, l: 75 }     // 浅红/粉红 (外围，明亮)
     },
     'gradient-cool': {
         type: 'gradient',
-        start: { h: 270, s: 100, l: 60 }, // Purple
-        end: { h: 180, s: 100, l: 60 }    // Cyan
+        start: { h: 270, s: 90, l: 35 },  // 深紫/暗紫 (中心，深色)
+        end: { h: 280, s: 100, l: 80 }    // 浅紫/粉紫 (外围，明亮)
     },
     'gradient-neon': {
         type: 'gradient',
-        start: { h: 200, s: 100, l: 60 }, // Blue
-        end: { h: 300, s: 100, l: 60 }    // Pink
+        start: { h: 240, s: 90, l: 30 },  // 深蓝/暗蓝 (中心，深色)
+        end: { h: 320, s: 100, l: 80 }     // 粉/粉紫 (外围，明亮) - 赛博霓虹经典配色
     },
 
     // Category 3: Monochrome Mode (Single Color)
@@ -162,10 +308,16 @@ function getGradientColor(baseColor, position) {
 
 // Initialize random colors for all circles
 function initializeColors() {
-    // Inner 4 circles
+    // Inner 3 circles (Circle 1, 2, 3)
     params.innerCircles.forEach(circle => {
         circle.color = getRandomRainbowColor();
     });
+
+    // Circle 4 segments
+    params.innerCircle4.segmentColors = [];
+    for (let i = 0; i < params.innerCircle4.segmentCount; i++) {
+        params.innerCircle4.segmentColors.push(getRandomRainbowColor());
+    }
 
     // Outer circle 5 segments
     params.outerCircle5.segmentColors = [];
@@ -221,8 +373,9 @@ function init() {
 
     initializeColors(); // Initialize random colors
     createControlPanel();
-    setupRandomizeButton();
     setupRecordingControls();
+    setupStateControls(); // 设置状态控制
+    updateStateButtons(); // 初始化按钮状态
     resize();
     draw();
     console.log('Rose layout initialized successfully!');
@@ -259,7 +412,7 @@ function createControlPanel() {
             <span class="value-display" id="innerY${index}Value">${(circle.offsetY * 100).toFixed(2)}%</span>
             
             <label>圆圈 ${index + 1} - 声波高度:</label>
-            <input type="range" id="innerWaveHeight${index}" min="0.5" max="2.0" step="0.1" value="${circle.waveHeight || 1.0}">
+            <input type="range" id="innerWaveHeight${index}" min="0.5" max="2.5" step="0.1" value="${circle.waveHeight || 1.0}">
             <span class="value-display" id="innerWaveHeight${index}Value">${(circle.waveHeight || 1.0).toFixed(1)}x</span>
         `;
         innerControls.appendChild(circleDiv);
@@ -285,6 +438,111 @@ function createControlPanel() {
             document.getElementById(`innerWaveHeight${index}Value`).textContent = params.innerCircles[index].waveHeight.toFixed(1) + 'x';
             draw();
         });
+    });
+
+    // Circle 4 controls (segmented petals)
+    const innerCircle4Controls = document.getElementById('innerCircle4Controls');
+    innerCircle4Controls.innerHTML = `
+        <div class="control-group">
+            <label>圆圈 4 - 半径 (相对于最大半径):</label>
+            <input type="range" id="inner4Radius" min="0.05" max="0.5" step="0.01" value="${params.innerCircle4.radius}">
+            <span class="value-display" id="inner4RadiusValue">${(params.innerCircle4.radius * 100).toFixed(1)}%</span>
+        </div>
+        <div class="control-group">
+            <label>圆圈 4 - X偏移:</label>
+            <input type="range" id="inner4X" min="-0.1" max="0.1" step="0.005" value="${params.innerCircle4.offsetX}">
+            <span class="value-display" id="inner4XValue">${(params.innerCircle4.offsetX * 100).toFixed(2)}%</span>
+        </div>
+        <div class="control-group">
+            <label>圆圈 4 - Y偏移:</label>
+            <input type="range" id="inner4Y" min="-0.1" max="0.1" step="0.005" value="${params.innerCircle4.offsetY}">
+            <span class="value-display" id="inner4YValue">${(params.innerCircle4.offsetY * 100).toFixed(2)}%</span>
+        </div>
+        <div class="control-group">
+            <label>圆圈 4 - 分段数量:</label>
+            <input type="range" id="inner4SegmentCount" min="1" max="4" step="1" value="${params.innerCircle4.segmentCount}">
+            <span class="value-display" id="inner4SegmentCountValue">${params.innerCircle4.segmentCount}</span>
+        </div>
+        <div class="control-group">
+            <label>圆圈 4 - 每段长度 (变化比例):</label>
+            <input type="range" id="inner4Segment" min="0" max="0.2" step="0.01" value="${params.innerCircle4.segmentLength}">
+            <span class="value-display" id="inner4SegmentValue">${(() => {
+                const initialUnit = 1.0 / params.innerCircle4.segmentCount;
+                const actualLength = initialUnit * (1 + params.innerCircle4.segmentLength);
+                return (params.innerCircle4.segmentLength * 100).toFixed(1) + '% (实际: ' + (actualLength * 100).toFixed(1) + '%)';
+            })()}</span>
+        </div>
+        <div class="control-group">
+            <label>圆圈 4 - 自旋角 (弧度):</label>
+            <input type="range" id="inner4SelfRot" min="-0.5" max="0.5" step="0.01" value="${params.innerCircle4.selfRotation}">
+            <span class="value-display" id="inner4SelfRotValue">${params.innerCircle4.selfRotation.toFixed(3)}</span>
+        </div>
+        <div class="control-group">
+            <label>圆圈 4 - 整体旋转角 (弧度):</label>
+            <input type="range" id="inner4GlobalRot" min="0" max="6.28" step="0.01" value="${params.innerCircle4.globalRotation}">
+            <span class="value-display" id="inner4GlobalRotValue">${params.innerCircle4.globalRotation.toFixed(3)}</span>
+        </div>
+        <div class="control-group">
+            <label>圆圈 4 - 声波高度:</label>
+            <input type="range" id="inner4WaveHeight" min="0.5" max="2.5" step="0.1" value="${params.innerCircle4.waveHeight || 1.0}">
+            <span class="value-display" id="inner4WaveHeightValue">${(params.innerCircle4.waveHeight || 1.0).toFixed(1)}x</span>
+        </div>
+    `;
+
+    // Add event listeners for Circle 4
+    document.getElementById('inner4Radius').addEventListener('input', (e) => {
+        params.innerCircle4.radius = parseFloat(e.target.value);
+        document.getElementById('inner4RadiusValue').textContent = (params.innerCircle4.radius * 100).toFixed(1) + '%';
+        draw();
+    });
+    document.getElementById('inner4X').addEventListener('input', (e) => {
+        params.innerCircle4.offsetX = parseFloat(e.target.value);
+        document.getElementById('inner4XValue').textContent = (params.innerCircle4.offsetX * 100).toFixed(2) + '%';
+        draw();
+    });
+    document.getElementById('inner4Y').addEventListener('input', (e) => {
+        params.innerCircle4.offsetY = parseFloat(e.target.value);
+        document.getElementById('inner4YValue').textContent = (params.innerCircle4.offsetY * 100).toFixed(2) + '%';
+        draw();
+    });
+    document.getElementById('inner4SegmentCount').addEventListener('input', (e) => {
+        params.innerCircle4.segmentCount = parseInt(e.target.value);
+        document.getElementById('inner4SegmentCountValue').textContent = params.innerCircle4.segmentCount;
+        const initialUnit = 1.0 / params.innerCircle4.segmentCount;
+        const actualLength = initialUnit * (1 + params.innerCircle4.segmentLength);
+        document.getElementById('inner4SegmentValue').textContent = (params.innerCircle4.segmentLength * 100).toFixed(1) + '% (实际: ' + (actualLength * 100).toFixed(1) + '%)';
+        // 重新初始化颜色和声纹数据
+        initializeColors();
+        if (voiceprintData.rings.length > 0) {
+            // 清空并重新初始化声纹数据
+            voiceprintData.rings = [];
+            if (isRecording || isSimulating) {
+                initializeVoiceprintRings();
+            }
+        }
+        draw();
+    });
+    document.getElementById('inner4Segment').addEventListener('input', (e) => {
+        params.innerCircle4.segmentLength = parseFloat(e.target.value);
+        const initialUnit = 1.0 / params.innerCircle4.segmentCount;
+        const actualLength = initialUnit * (1 + params.innerCircle4.segmentLength);
+        document.getElementById('inner4SegmentValue').textContent = (params.innerCircle4.segmentLength * 100).toFixed(1) + '% (实际: ' + (actualLength * 100).toFixed(1) + '%)';
+        draw();
+    });
+    document.getElementById('inner4SelfRot').addEventListener('input', (e) => {
+        params.innerCircle4.selfRotation = parseFloat(e.target.value);
+        document.getElementById('inner4SelfRotValue').textContent = params.innerCircle4.selfRotation.toFixed(3);
+        draw();
+    });
+    document.getElementById('inner4GlobalRot').addEventListener('input', (e) => {
+        params.innerCircle4.globalRotation = parseFloat(e.target.value);
+        document.getElementById('inner4GlobalRotValue').textContent = params.innerCircle4.globalRotation.toFixed(3);
+        draw();
+    });
+    document.getElementById('inner4WaveHeight').addEventListener('input', (e) => {
+        params.innerCircle4.waveHeight = parseFloat(e.target.value);
+        document.getElementById('inner4WaveHeightValue').textContent = params.innerCircle4.waveHeight.toFixed(1) + 'x';
+        draw();
     });
 
     // Outer circle 5 controls
@@ -321,7 +579,7 @@ function createControlPanel() {
         </div>
         <div class="control-group">
             <label>声波高度:</label>
-            <input type="range" id="outer5WaveHeight" min="0.5" max="2.0" step="0.1" value="${params.outerCircle5.waveHeight || 1.0}">
+            <input type="range" id="outer5WaveHeight" min="0.5" max="3.0" step="0.1" value="${params.outerCircle5.waveHeight || 1.0}">
             <span class="value-display" id="outer5WaveHeightValue">${(params.outerCircle5.waveHeight || 1.0).toFixed(1)}x</span>
         </div>
     `;
@@ -397,7 +655,7 @@ function createControlPanel() {
         </div>
         <div class="control-group">
             <label>声波高度:</label>
-            <input type="range" id="outer6WaveHeight" min="0.5" max="2.0" step="0.1" value="${params.outerCircle6.waveHeight || 1.0}">
+            <input type="range" id="outer6WaveHeight" min="0.5" max="3.0" step="0.1" value="${params.outerCircle6.waveHeight || 1.0}">
             <span class="value-display" id="outer6WaveHeightValue">${(params.outerCircle6.waveHeight || 1.0).toFixed(1)}x</span>
         </div>
     `;
@@ -440,22 +698,6 @@ function createControlPanel() {
     });
 }
 
-// Setup randomize button
-function setupRandomizeButton() {
-    const btn = document.getElementById('randomizeButton');
-    if (btn) {
-        btn.addEventListener('click', () => {
-            initializeColors(); // Regenerate rainbow colors
-            randomizeInnerCircles();
-            randomizeOuterCircles();
-            draw();
-        });
-    }
-
-    // Setup keyboard shortcuts
-    setupShortcuts();
-}
-
 // Setup keyboard shortcuts
 function setupShortcuts() {
     document.addEventListener('keydown', (e) => {
@@ -471,170 +713,8 @@ function setupShortcuts() {
         }
     });
 }
-// First randomize sizes (±20% from initial values), then calculate positions
-function randomizeInnerCircles() {
-    const maxRadius = config.maxRadius * 0.5;
 
-    // Step 1: Randomize circle sizes first
-    // Circle 4: ±10%, Circles 1-3: ±15%
-    params.innerCircles.forEach((circle, index) => {
-        const initialRadius = initialRadii[index];
-        // Circle 4 (index 3) uses 10% variation, others use 15%
-        const variationRange = index === 3 ? 0.1 : 0.15; // 10% for circle 4, 15% for others
-        const variation = (Math.random() - 0.5) * (variationRange * 2); // -range to +range
-        const newRadius = initialRadius * (1 + variation);
-        // Clamp to reasonable bounds (5% to 50% of maxRadius)
-        params.innerCircles[index].radius = Math.max(0.05, Math.min(0.5, newRadius));
-    });
-
-    // Step 2: Calculate positions based on new radii
-    // Circle 4: Fixed at center, radius is now randomized
-    const r4 = maxRadius * params.innerCircles[3].radius;
-    params.innerCircles[3].offsetX = 0;
-    params.innerCircles[3].offsetY = 0;
-
-    // Circle 3: Rolls inside Circle 4, tangent to Circle 4
-    // Distance from center = r4 - r3
-    const r3 = maxRadius * params.innerCircles[2].radius;
-    // Ensure r3 is smaller than r4 for proper nesting
-    const actualR3 = Math.min(r3, r4 * 0.99);
-    const dist3 = Math.max(0, r4 - actualR3); // Ensure non-negative
-    const angle3 = Math.random() * Math.PI * 2;
-    params.innerCircles[2].offsetX = (dist3 * Math.cos(angle3)) / maxRadius;
-    params.innerCircles[2].offsetY = (dist3 * Math.sin(angle3)) / maxRadius;
-
-    // Circle 2: Rolls inside Circle 3, tangent to Circle 3
-    // Distance from Circle 3's center = r3 - r2
-    const r2 = maxRadius * params.innerCircles[1].radius;
-    const actualR2 = Math.min(r2, actualR3 * 0.99);
-    const dist2 = Math.max(0, actualR3 - actualR2);
-    const angle2 = Math.random() * Math.PI * 2;
-    // Calculate Circle 3's center position
-    const c3X = maxRadius * params.innerCircles[2].offsetX;
-    const c3Y = maxRadius * params.innerCircles[2].offsetY;
-    // Circle 2's center relative to Circle 3's center
-    params.innerCircles[1].offsetX = (c3X + dist2 * Math.cos(angle2)) / maxRadius;
-    params.innerCircles[1].offsetY = (c3Y + dist2 * Math.sin(angle2)) / maxRadius;
-
-    // Circle 1: Rolls inside Circle 2, tangent to Circle 2
-    // Distance from Circle 2's center = r2 - r1
-    const r1 = maxRadius * params.innerCircles[0].radius;
-    const actualR1 = Math.min(r1, actualR2 * 0.99);
-    const dist1 = Math.max(0, actualR2 - actualR1);
-    const angle1 = Math.random() * Math.PI * 2;
-    // Calculate Circle 2's center position
-    const c2X = maxRadius * params.innerCircles[1].offsetX;
-    const c2Y = maxRadius * params.innerCircles[1].offsetY;
-    // Circle 1's center relative to Circle 2's center
-    params.innerCircles[0].offsetX = (c2X + dist1 * Math.cos(angle1)) / maxRadius;
-    params.innerCircles[0].offsetY = (c2Y + dist1 * Math.sin(angle1)) / maxRadius;
-
-    // Update UI sliders to reflect new values
-    params.innerCircles.forEach((circle, index) => {
-        const rSlider = document.getElementById(`innerR${index}`);
-        const xSlider = document.getElementById(`innerX${index}`);
-        const ySlider = document.getElementById(`innerY${index}`);
-
-        if (rSlider) {
-            rSlider.value = circle.radius;
-            document.getElementById(`innerR${index}Value`).textContent = (circle.radius * 100).toFixed(1) + '%';
-        }
-        if (xSlider) {
-            xSlider.value = circle.offsetX;
-            document.getElementById(`innerX${index}Value`).textContent = (circle.offsetX * 100).toFixed(2) + '%';
-        }
-        if (ySlider) {
-            ySlider.value = circle.offsetY;
-            document.getElementById(`innerY${index}Value`).textContent = (circle.offsetY * 100).toFixed(2) + '%';
-        }
-    });
-
-    // Step 3: Randomize outer circles (5 and 6)
-    randomizeOuterCircles();
-
-    // Redraw
-    draw();
-}
-
-// Randomize outer circles 5 and 6
-function randomizeOuterCircles() {
-    // Step 1: Randomize segment counts
-    // Circle 5: random between 3-5
-    const segmentCount5 = 3 + Math.floor(Math.random() * 3); // 3, 4, or 5
-    params.outerCircle5.segmentCount = segmentCount5;
-
-    // Circle 6: random between a (Circle 5's count) to 6
-    const segmentCount6 = segmentCount5 + Math.floor(Math.random() * (7 - segmentCount5)); // a to 6 (inclusive)
-    params.outerCircle6.segmentCount = segmentCount6;
-
-    // Step 2: Randomize Circle 5 parameters
-    // 1. Segment length variation: 4% to 10%
-    params.outerCircle5.segmentLength = 0.04 + Math.random() * 0.06; // 0.04 to 0.10
-    // 2. Self-rotation: 0.1 to 0.13
-    params.outerCircle5.selfRotation = 0.1 + Math.random() * 0.03; // 0.1 to 0.13
-    // 3. Global rotation: 0 to 2π (any angle)
-    params.outerCircle5.globalRotation = Math.random() * Math.PI * 2;
-
-    // Step 3: Randomize Circle 6 parameters
-    // 1. Segment length variation: 4% to 10%
-    params.outerCircle6.segmentLength = 0.04 + Math.random() * 0.06; // 0.04 to 0.10
-    // 2. Self-rotation: 0.1 to 0.13
-    params.outerCircle6.selfRotation = 0.1 + Math.random() * 0.03; // 0.1 to 0.13
-    // 3. Global rotation: 0 to 2π (any angle)
-    params.outerCircle6.globalRotation = Math.random() * Math.PI * 2;
-
-    // Update UI sliders for Circle 5
-    const outer5SegmentCount = document.getElementById('outer5SegmentCount');
-    const outer5Segment = document.getElementById('outer5Segment');
-    const outer5SelfRot = document.getElementById('outer5SelfRot');
-    const outer5GlobalRot = document.getElementById('outer5GlobalRot');
-
-    if (outer5SegmentCount) {
-        outer5SegmentCount.value = params.outerCircle5.segmentCount;
-        document.getElementById('outer5SegmentCountValue').textContent = params.outerCircle5.segmentCount;
-    }
-    if (outer5Segment) {
-        outer5Segment.value = params.outerCircle5.segmentLength;
-        const initialUnit5 = 1.0 / params.outerCircle5.segmentCount;
-        const actualLength5 = initialUnit5 * (1 + params.outerCircle5.segmentLength);
-        document.getElementById('outer5SegmentValue').textContent = (params.outerCircle5.segmentLength * 100).toFixed(1) + '% (实际: ' + (actualLength5 * 100).toFixed(1) + '%)';
-    }
-    if (outer5SelfRot) {
-        outer5SelfRot.value = params.outerCircle5.selfRotation;
-        document.getElementById('outer5SelfRotValue').textContent = params.outerCircle5.selfRotation.toFixed(3);
-    }
-    if (outer5GlobalRot) {
-        outer5GlobalRot.value = params.outerCircle5.globalRotation;
-        document.getElementById('outer5GlobalRotValue').textContent = params.outerCircle5.globalRotation.toFixed(3);
-    }
-
-    // Update UI sliders for Circle 6
-    const outer6SegmentCount = document.getElementById('outer6SegmentCount');
-    const outer6Segment = document.getElementById('outer6Segment');
-    const outer6SelfRot = document.getElementById('outer6SelfRot');
-    const outer6GlobalRot = document.getElementById('outer6GlobalRot');
-
-    if (outer6SegmentCount) {
-        outer6SegmentCount.value = params.outerCircle6.segmentCount;
-        document.getElementById('outer6SegmentCountValue').textContent = params.outerCircle6.segmentCount;
-    }
-    if (outer6Segment) {
-        outer6Segment.value = params.outerCircle6.segmentLength;
-        const initialUnit6 = 1.0 / params.outerCircle6.segmentCount;
-        const actualLength6 = initialUnit6 * (1 + params.outerCircle6.segmentLength);
-        document.getElementById('outer6SegmentValue').textContent = (params.outerCircle6.segmentLength * 100).toFixed(1) + '% (实际: ' + (actualLength6 * 100).toFixed(1) + '%)';
-    }
-    if (outer6SelfRot) {
-        outer6SelfRot.value = params.outerCircle6.selfRotation;
-        document.getElementById('outer6SelfRotValue').textContent = params.outerCircle6.selfRotation.toFixed(3);
-    }
-    if (outer6GlobalRot) {
-        outer6GlobalRot.value = params.outerCircle6.globalRotation;
-        document.getElementById('outer6GlobalRotValue').textContent = params.outerCircle6.globalRotation.toFixed(3);
-    }
-}
-
-// Calculate positions for 4 nested circles using parameters
+// Calculate positions for 3 nested circles using parameters (Circle 1, 2, 3)
 function calculateFourCircles() {
     const maxRadius = config.maxRadius * 0.5;
     const circles = [];
@@ -676,10 +756,18 @@ function drawCircleOutline(cx, cy, radius, color = 'white') {
     ctx.stroke();
 }
 
-// Draw segmented circle (for circles 5 and 6)
+// Draw segmented circle (for circles 4, 5 and 6)
 function drawSegmentedCircle(circleNumber, circleParams) {
     const numSegments = circleParams.segmentCount;
     const baseRadius = config.maxRadius * circleParams.radius;
+    
+    // Get center position (circle 4 has offset, circles 5 and 6 are centered)
+    const centerX = circleParams.offsetX !== undefined 
+        ? config.centerX + config.maxRadius * circleParams.offsetX 
+        : config.centerX;
+    const centerY = circleParams.offsetY !== undefined 
+        ? config.centerY + config.maxRadius * circleParams.offsetY 
+        : config.centerY;
 
     // Calculate segment geometry
     const initialUnit = 1.0 / numSegments;
@@ -691,7 +779,9 @@ function drawSegmentedCircle(circleNumber, circleParams) {
 
     for (let i = 0; i < numSegments; i++) {
         // Get color for this segment from palette
-        const segmentColor = getBaseLayerColor(4 + (circleNumber - 5)); // ringIndex 4 for circle 5, 5 for circle 6
+        // ringIndex: 3 for circle 4, 4 for circle 5, 5 for circle 6
+        const ringIndex = circleNumber === 4 ? 3 : (4 + (circleNumber - 5));
+        const segmentColor = getBaseLayerColor(ringIndex);
         ctx.strokeStyle = segmentColor;
         ctx.lineWidth = 2;
 
@@ -699,36 +789,44 @@ function drawSegmentedCircle(circleNumber, circleParams) {
         const segmentMidAngle = currentAngle + segmentAngleSize * 0.5;
 
         // Calculate the center point of the arc on the circle (this is the rotation center for self-rotation)
-        const centerX = config.centerX + Math.cos(segmentMidAngle) * baseRadius;
-        const centerY = config.centerY + Math.sin(segmentMidAngle) * baseRadius;
+        const segmentCenterX = centerX + Math.cos(segmentMidAngle) * baseRadius;
+        const segmentCenterY = centerY + Math.sin(segmentMidAngle) * baseRadius;
 
-        // Draw this segment as an independent arc
-        ctx.beginPath();
+        // Draw this segment as an independent arc with fade in/out at edges
+        // 计算过渡区域：占分段长度的10%
+        const fadeRatio = segmentFadeRatio; // 使用全局可调节参数
+        const fadeAngleSize = segmentAngleSize * fadeRatio;
+        
+        // 分段绘制：开始渐变、中间实心、结束渐变
         const segments = 60;
-        for (let j = 0; j <= segments; j++) {
-            const t = j / segments;
-            // Original angle of the point on the circle
-            const originalAngle = currentAngle + t * segmentAngleSize;
-
-            // Original point on the circle
-            const originalX = config.centerX + Math.cos(originalAngle) * baseRadius;
-            const originalY = config.centerY + Math.sin(originalAngle) * baseRadius;
-
-            // Apply self-rotation: rotate around the arc's center point (not the circle center)
-            // Translate to center point, rotate, then translate back
-            const dx = originalX - centerX;
-            const dy = originalY - centerY;
-
-            // Apply rotation matrix around the arc center point
+        const fadeSegments = Math.max(1, Math.floor(segments * fadeRatio));
+        const solidSegments = segments - 2 * fadeSegments;
+        
+        // 保存当前globalAlpha
+        const savedAlpha = ctx.globalAlpha;
+        
+        // 1. 开始渐变区域（从透明到不透明）
+        ctx.beginPath();
+        for (let j = 0; j <= fadeSegments; j++) {
+            const t = j / fadeSegments; // 0 到 1
+            const alpha = t; // 透明度从0到1
+            ctx.globalAlpha = savedAlpha * alpha;
+            
+            const angleT = t * fadeRatio; // 在整个分段中的位置（0到0.1）
+            const originalAngle = currentAngle + angleT * segmentAngleSize;
+            
+            const originalX = centerX + Math.cos(originalAngle) * baseRadius;
+            const originalY = centerY + Math.sin(originalAngle) * baseRadius;
+            
+            const dx = originalX - segmentCenterX;
+            const dy = originalY - segmentCenterY;
             const cosRot = Math.cos(circleParams.selfRotation);
             const sinRot = Math.sin(circleParams.selfRotation);
             const rotatedX = dx * cosRot - dy * sinRot;
             const rotatedY = dx * sinRot + dy * cosRot;
-
-            // Translate back
-            const x = centerX + rotatedX;
-            const y = centerY + rotatedY;
-
+            const x = segmentCenterX + rotatedX;
+            const y = segmentCenterY + rotatedY;
+            
             if (j === 0) {
                 ctx.moveTo(x, y);
             } else {
@@ -736,6 +834,67 @@ function drawSegmentedCircle(circleNumber, circleParams) {
             }
         }
         ctx.stroke();
+        
+        // 2. 中间实心区域（完全不透明）
+        ctx.globalAlpha = savedAlpha;
+        ctx.beginPath();
+        for (let j = 0; j <= solidSegments; j++) {
+            const t = j / solidSegments; // 0 到 1
+            const angleT = fadeRatio + t * (1 - 2 * fadeRatio); // 从0.1到0.9
+            const originalAngle = currentAngle + angleT * segmentAngleSize;
+            
+            const originalX = centerX + Math.cos(originalAngle) * baseRadius;
+            const originalY = centerY + Math.sin(originalAngle) * baseRadius;
+            
+            const dx = originalX - segmentCenterX;
+            const dy = originalY - segmentCenterY;
+            const cosRot = Math.cos(circleParams.selfRotation);
+            const sinRot = Math.sin(circleParams.selfRotation);
+            const rotatedX = dx * cosRot - dy * sinRot;
+            const rotatedY = dx * sinRot + dy * cosRot;
+            const x = segmentCenterX + rotatedX;
+            const y = segmentCenterY + rotatedY;
+            
+            if (j === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        ctx.stroke();
+        
+        // 3. 结束渐变区域（从不透明到透明）
+        ctx.beginPath();
+        for (let j = 0; j <= fadeSegments; j++) {
+            const t = j / fadeSegments; // 0 到 1
+            const alpha = 1 - t; // 透明度从1到0
+            ctx.globalAlpha = savedAlpha * alpha;
+            
+            const angleT = (1 - fadeRatio) + t * fadeRatio; // 从0.9到1.0
+            const originalAngle = currentAngle + angleT * segmentAngleSize;
+            
+            const originalX = centerX + Math.cos(originalAngle) * baseRadius;
+            const originalY = centerY + Math.sin(originalAngle) * baseRadius;
+            
+            const dx = originalX - segmentCenterX;
+            const dy = originalY - segmentCenterY;
+            const cosRot = Math.cos(circleParams.selfRotation);
+            const sinRot = Math.sin(circleParams.selfRotation);
+            const rotatedX = dx * cosRot - dy * sinRot;
+            const rotatedY = dx * sinRot + dy * cosRot;
+            const x = segmentCenterX + rotatedX;
+            const y = segmentCenterY + rotatedY;
+            
+            if (j === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        ctx.stroke();
+        
+        // 恢复globalAlpha
+        ctx.globalAlpha = savedAlpha;
 
         // Move to next segment position (with gap)
         currentAngle += segmentAngleSize + gapSize;
@@ -760,8 +919,12 @@ function drawRawWaveforms() {
 
         // Get color for this ring
         let baseColor;
-        if (ringIndex < 4) {
+        if (ringIndex < 3) {
             baseColor = params.innerCircles[ringIndex].color;
+        } else if (ringIndex === 3) {
+            // Circle 4 - segmented
+            const colors = params.innerCircle4.segmentColors;
+            baseColor = colors[0] || '#fff';
         } else if (ringIndex === 4) {
             const colors = params.outerCircle5.segmentColors;
             baseColor = colors[0] || '#fff';
@@ -799,8 +962,10 @@ function drawRawWaveforms() {
 
                 // 获取当前圆圈的声波高度缩放因子
                 let waveHeightScale = 1.0;
-                if (ringIndex < 4) {
+                if (ringIndex < 3) {
                     waveHeightScale = params.innerCircles[ringIndex].waveHeight || 1.0;
+                } else if (ringIndex === 3) {
+                    waveHeightScale = params.innerCircle4.waveHeight || 1.0;
                 } else if (ringIndex === 4) {
                     waveHeightScale = params.outerCircle5.waveHeight || 1.0;
                 } else {
@@ -841,12 +1006,15 @@ function draw() {
 
     // Draw base layer (circles and segments)
     if (layerVisibility.showBaseLayer) {
-        // Draw the 4 nested circles with colors from palette
-        const fourCircles = calculateFourCircles();
-        fourCircles.forEach((circle, index) => {
+        // Draw the 3 inner circles (Circle 1, 2, 3) with colors from palette
+        const threeCircles = calculateFourCircles(); // 现在只返回3个圆
+        threeCircles.forEach((circle, index) => {
             const color = getBaseLayerColor(index);
             drawCircleOutline(circle.cx, circle.cy, circle.radius, color);
         });
+
+        // Draw Circle 4 as segmented circle (with offset support)
+        drawSegmentedCircle(4, params.innerCircle4);
 
         // Draw outer segmented circles
         drawSegmentedCircle(5, params.outerCircle5);
@@ -944,6 +1112,17 @@ function setupRecordingControls() {
         });
     }
 
+    // 分段边缘渐变比例控制
+    const segmentFadeRatioSlider = document.getElementById('segmentFadeRatio');
+    const segmentFadeRatioValue = document.getElementById('segmentFadeRatioValue');
+    if (segmentFadeRatioSlider && segmentFadeRatioValue) {
+        segmentFadeRatioSlider.addEventListener('input', (e) => {
+            segmentFadeRatio = parseFloat(e.target.value);
+            segmentFadeRatioValue.textContent = (segmentFadeRatio * 100).toFixed(0) + '%';
+            draw();
+        });
+    }
+
     // Layer visibility controls
     const baseCheck = document.getElementById('showBaseLayer');
     const voiceCheck = document.getElementById('showVoiceprintLayer');
@@ -980,6 +1159,386 @@ function setupRecordingControls() {
             // Force redraw immediately
             draw();
         });
+    }
+}
+
+// 设置状态控制
+function setupStateControls() {
+    const defaultBtn = document.getElementById('defaultStateButton');
+    const bloomBtn = document.getElementById('bloomStateButton');
+    const blossomBtn = document.getElementById('blossomStateButton');
+    const transitionSlider = document.getElementById('transitionSlider');
+    const transitionValue = document.getElementById('transitionValue');
+
+    // 默认状态按钮
+    if (defaultBtn) {
+        defaultBtn.addEventListener('click', () => {
+            transitionProgress = 0;
+            if (transitionSlider) transitionSlider.value = 0;
+            if (transitionValue) transitionValue.textContent = '0%';
+            applyTransition(0);
+            updateStateButtons();
+        });
+    }
+
+    // 盛开状态按钮
+    if (bloomBtn) {
+        bloomBtn.addEventListener('click', () => {
+            transitionProgress = 100;
+            if (transitionSlider) transitionSlider.value = 100;
+            if (transitionValue) transitionValue.textContent = '100%';
+            applyTransition(100);
+            updateStateButtons();
+        });
+    }
+
+    // 绽放状态按钮
+    if (blossomBtn) {
+        blossomBtn.addEventListener('click', () => {
+            transitionProgress = 200;
+            if (transitionSlider) transitionSlider.value = 200;
+            if (transitionValue) transitionValue.textContent = '200%';
+            applyTransition(200);
+            updateStateButtons();
+        });
+    }
+    
+    // 注意：300%会循环回到默认状态（0%）
+
+    // 过渡进度条
+    if (transitionSlider) {
+        transitionSlider.addEventListener('input', (e) => {
+            transitionProgress = parseFloat(e.target.value);
+            if (transitionValue) transitionValue.textContent = transitionProgress.toFixed(0) + '%';
+            applyTransition(transitionProgress);
+            updateStateButtons();
+        });
+    }
+
+    // 颜色过渡进度条
+    const colorTransitionSlider = document.getElementById('colorTransitionSlider');
+    const colorTransitionValue = document.getElementById('colorTransitionValue');
+    if (colorTransitionSlider) {
+        colorTransitionSlider.addEventListener('input', (e) => {
+            colorTransitionProgress = parseFloat(e.target.value);
+            if (colorTransitionValue) colorTransitionValue.textContent = colorTransitionProgress.toFixed(0) + '%';
+            draw(); // 重绘以应用新的颜色过渡
+        });
+    }
+}
+
+// 更新状态按钮的激活状态
+function updateStateButtons() {
+    const defaultBtn = document.getElementById('defaultStateButton');
+    const bloomBtn = document.getElementById('bloomStateButton');
+    const blossomBtn = document.getElementById('blossomStateButton');
+    
+    if (defaultBtn && bloomBtn && blossomBtn) {
+        // 清除所有激活状态
+        defaultBtn.classList.remove('active');
+        bloomBtn.classList.remove('active');
+        blossomBtn.classList.remove('active');
+        
+        // 处理循环：300回到0
+        const normalizedProgress = transitionProgress % 300;
+        
+        // 根据进度设置激活状态
+        if (normalizedProgress === 0 || normalizedProgress >= 250) {
+            // 0 或接近300（250-300）时，显示默认状态
+            defaultBtn.classList.add('active');
+        } else if (normalizedProgress === 100) {
+            bloomBtn.classList.add('active');
+        } else if (normalizedProgress === 200) {
+            blossomBtn.classList.add('active');
+        } else {
+            // 中间状态，根据更接近哪个来决定
+            if (normalizedProgress < 50) {
+                defaultBtn.classList.add('active');
+            } else if (normalizedProgress < 150) {
+                bloomBtn.classList.add('active');
+            } else if (normalizedProgress < 250) {
+                blossomBtn.classList.add('active');
+            } else {
+                defaultBtn.classList.add('active');
+            }
+        }
+    }
+}
+
+// 应用过渡（根据进度在三个状态之间循环插值：0=默认，100=盛开，200=绽放，300=默认）
+function applyTransition(progress) {
+    let sourceState, targetState, t;
+    
+    // 处理循环：300回到0（默认状态）
+    const normalizedProgress = progress % 300;
+    
+    // 确定源状态和目标状态
+    if (normalizedProgress <= 100) {
+        // 0-100: 默认状态 -> 盛开状态
+        sourceState = defaultState;
+        targetState = bloomState;
+        t = normalizedProgress / 100; // 0 到 1
+    } else if (normalizedProgress <= 200) {
+        // 100-200: 盛开状态 -> 绽放状态
+        sourceState = bloomState;
+        targetState = blossomState;
+        t = (normalizedProgress - 100) / 100; // 0 到 1
+    } else {
+        // 200-300: 绽放状态 -> 默认状态（循环）
+        sourceState = blossomState;
+        targetState = defaultState;
+        t = (normalizedProgress - 200) / 100; // 0 到 1
+    }
+
+    // 插值内部圆圈参数（Circle 1, 2, 3）
+    params.innerCircles.forEach((circle, index) => {
+        const sourceCircle = sourceState.innerCircles[index];
+        const targetCircle = targetState.innerCircles[index];
+        
+        circle.radius = lerp(sourceCircle.radius, targetCircle.radius, t);
+        circle.offsetX = lerp(sourceCircle.offsetX, targetCircle.offsetX, t);
+        circle.offsetY = lerp(sourceCircle.offsetY, targetCircle.offsetY, t);
+        circle.waveHeight = lerp(sourceCircle.waveHeight, targetCircle.waveHeight, t);
+    });
+
+    // 插值圆4参数
+    const source4 = sourceState.innerCircle4;
+    const target4 = targetState.innerCircle4;
+    params.innerCircle4.radius = lerp(source4.radius, target4.radius, t);
+    params.innerCircle4.offsetX = lerp(source4.offsetX, target4.offsetX, t);
+    params.innerCircle4.offsetY = lerp(source4.offsetY, target4.offsetY, t);
+    params.innerCircle4.segmentCount = Math.round(lerp(source4.segmentCount, target4.segmentCount, t));
+    params.innerCircle4.segmentLength = lerp(source4.segmentLength, target4.segmentLength, t);
+    params.innerCircle4.selfRotation = lerp(source4.selfRotation, target4.selfRotation, t);
+    params.innerCircle4.globalRotation = lerp(source4.globalRotation, target4.globalRotation, t);
+    params.innerCircle4.waveHeight = lerp(source4.waveHeight, target4.waveHeight, t);
+
+    // 插值圆5参数
+    const source5 = sourceState.outerCircle5;
+    const target5 = targetState.outerCircle5;
+    params.outerCircle5.radius = lerp(source5.radius, target5.radius, t);
+    params.outerCircle5.segmentCount = Math.round(lerp(source5.segmentCount, target5.segmentCount, t));
+    params.outerCircle5.segmentLength = lerp(source5.segmentLength, target5.segmentLength, t);
+    params.outerCircle5.selfRotation = lerp(source5.selfRotation, target5.selfRotation, t);
+    params.outerCircle5.globalRotation = lerp(source5.globalRotation, target5.globalRotation, t);
+    params.outerCircle5.waveHeight = lerp(source5.waveHeight, target5.waveHeight, t);
+
+    // 插值圆6参数
+    const source6 = sourceState.outerCircle6;
+    const target6 = targetState.outerCircle6;
+    params.outerCircle6.radius = lerp(source6.radius, target6.radius, t);
+    params.outerCircle6.segmentCount = Math.round(lerp(source6.segmentCount, target6.segmentCount, t));
+    params.outerCircle6.segmentLength = lerp(source6.segmentLength, target6.segmentLength, t);
+    params.outerCircle6.selfRotation = lerp(source6.selfRotation, target6.selfRotation, t);
+    params.outerCircle6.globalRotation = lerp(source6.globalRotation, target6.globalRotation, t);
+    params.outerCircle6.waveHeight = lerp(source6.waveHeight, target6.waveHeight, t);
+
+    // 更新UI控件以反映新值
+    updateControlPanelUI();
+    
+    // 只更新颜色，不触碰声纹数据
+    // 声纹数据在状态切换时应该保持不变
+    initializeColors();
+    
+    // 重绘
+    draw();
+}
+
+// 线性插值函数
+function lerp(start, end, t) {
+    return start + (end - start) * t;
+}
+
+// 更新控制面板UI以反映当前参数值
+function updateControlPanelUI() {
+    // 更新内部圆圈控件
+    params.innerCircles.forEach((circle, index) => {
+        const rSlider = document.getElementById(`innerR${index}`);
+        const xSlider = document.getElementById(`innerX${index}`);
+        const ySlider = document.getElementById(`innerY${index}`);
+        const waveSlider = document.getElementById(`innerWaveHeight${index}`);
+
+        if (rSlider) {
+            rSlider.value = circle.radius;
+            const valueDisplay = document.getElementById(`innerR${index}Value`);
+            if (valueDisplay) valueDisplay.textContent = (circle.radius * 100).toFixed(1) + '%';
+        }
+        if (xSlider) {
+            xSlider.value = circle.offsetX;
+            const valueDisplay = document.getElementById(`innerX${index}Value`);
+            if (valueDisplay) valueDisplay.textContent = (circle.offsetX * 100).toFixed(2) + '%';
+        }
+        if (ySlider) {
+            ySlider.value = circle.offsetY;
+            const valueDisplay = document.getElementById(`innerY${index}Value`);
+            if (valueDisplay) valueDisplay.textContent = (circle.offsetY * 100).toFixed(2) + '%';
+        }
+        if (waveSlider) {
+            waveSlider.value = circle.waveHeight;
+            const valueDisplay = document.getElementById(`innerWaveHeight${index}Value`);
+            if (valueDisplay) valueDisplay.textContent = circle.waveHeight.toFixed(1) + 'x';
+        }
+    });
+
+    // 更新圆4控件
+    const inner4Radius = document.getElementById('inner4Radius');
+    const inner4X = document.getElementById('inner4X');
+    const inner4Y = document.getElementById('inner4Y');
+    const inner4SegmentCount = document.getElementById('inner4SegmentCount');
+    const inner4Segment = document.getElementById('inner4Segment');
+    const inner4SelfRot = document.getElementById('inner4SelfRot');
+    const inner4GlobalRot = document.getElementById('inner4GlobalRot');
+    const inner4WaveHeight = document.getElementById('inner4WaveHeight');
+
+    if (inner4Radius) {
+        inner4Radius.value = params.innerCircle4.radius;
+        const valueDisplay = document.getElementById('inner4RadiusValue');
+        if (valueDisplay) valueDisplay.textContent = (params.innerCircle4.radius * 100).toFixed(1) + '%';
+    }
+    if (inner4X) {
+        inner4X.value = params.innerCircle4.offsetX;
+        const valueDisplay = document.getElementById('inner4XValue');
+        if (valueDisplay) valueDisplay.textContent = (params.innerCircle4.offsetX * 100).toFixed(2) + '%';
+    }
+    if (inner4Y) {
+        inner4Y.value = params.innerCircle4.offsetY;
+        const valueDisplay = document.getElementById('inner4YValue');
+        if (valueDisplay) valueDisplay.textContent = (params.innerCircle4.offsetY * 100).toFixed(2) + '%';
+    }
+    if (inner4SegmentCount) {
+        inner4SegmentCount.value = params.innerCircle4.segmentCount;
+        const valueDisplay = document.getElementById('inner4SegmentCountValue');
+        if (valueDisplay) valueDisplay.textContent = params.innerCircle4.segmentCount;
+        const initialUnit = 1.0 / params.innerCircle4.segmentCount;
+        const actualLength = initialUnit * (1 + params.innerCircle4.segmentLength);
+        const segmentValue = document.getElementById('inner4SegmentValue');
+        if (segmentValue) {
+            segmentValue.textContent = (params.innerCircle4.segmentLength * 100).toFixed(1) + '% (实际: ' + (actualLength * 100).toFixed(1) + '%)';
+        }
+    }
+    if (inner4Segment) {
+        inner4Segment.value = params.innerCircle4.segmentLength;
+        const initialUnit = 1.0 / params.innerCircle4.segmentCount;
+        const actualLength = initialUnit * (1 + params.innerCircle4.segmentLength);
+        const segmentValue = document.getElementById('inner4SegmentValue');
+        if (segmentValue) {
+            segmentValue.textContent = (params.innerCircle4.segmentLength * 100).toFixed(1) + '% (实际: ' + (actualLength * 100).toFixed(1) + '%)';
+        }
+    }
+    if (inner4SelfRot) {
+        inner4SelfRot.value = params.innerCircle4.selfRotation;
+        const valueDisplay = document.getElementById('inner4SelfRotValue');
+        if (valueDisplay) valueDisplay.textContent = params.innerCircle4.selfRotation.toFixed(3);
+    }
+    if (inner4GlobalRot) {
+        inner4GlobalRot.value = params.innerCircle4.globalRotation;
+        const valueDisplay = document.getElementById('inner4GlobalRotValue');
+        if (valueDisplay) valueDisplay.textContent = params.innerCircle4.globalRotation.toFixed(3);
+    }
+    if (inner4WaveHeight) {
+        inner4WaveHeight.value = params.innerCircle4.waveHeight;
+        const valueDisplay = document.getElementById('inner4WaveHeightValue');
+        if (valueDisplay) valueDisplay.textContent = params.innerCircle4.waveHeight.toFixed(1) + 'x';
+    }
+
+    // 更新圆5控件
+    const outer5Radius = document.getElementById('outer5Radius');
+    const outer5SegmentCount = document.getElementById('outer5SegmentCount');
+    const outer5Segment = document.getElementById('outer5Segment');
+    const outer5SelfRot = document.getElementById('outer5SelfRot');
+    const outer5GlobalRot = document.getElementById('outer5GlobalRot');
+    const outer5WaveHeight = document.getElementById('outer5WaveHeight');
+
+    if (outer5Radius) {
+        outer5Radius.value = params.outerCircle5.radius;
+        const valueDisplay = document.getElementById('outer5RadiusValue');
+        if (valueDisplay) valueDisplay.textContent = (params.outerCircle5.radius * 100).toFixed(1) + '%';
+    }
+    if (outer5SegmentCount) {
+        outer5SegmentCount.value = params.outerCircle5.segmentCount;
+        const valueDisplay = document.getElementById('outer5SegmentCountValue');
+        if (valueDisplay) valueDisplay.textContent = params.outerCircle5.segmentCount;
+        // 更新分段长度显示
+        const initialUnit = 1.0 / params.outerCircle5.segmentCount;
+        const actualLength = initialUnit * (1 + params.outerCircle5.segmentLength);
+        const segmentValue = document.getElementById('outer5SegmentValue');
+        if (segmentValue) {
+            segmentValue.textContent = (params.outerCircle5.segmentLength * 100).toFixed(1) + '% (实际: ' + (actualLength * 100).toFixed(1) + '%)';
+        }
+    }
+    if (outer5Segment) {
+        outer5Segment.value = params.outerCircle5.segmentLength;
+        const initialUnit = 1.0 / params.outerCircle5.segmentCount;
+        const actualLength = initialUnit * (1 + params.outerCircle5.segmentLength);
+        const segmentValue = document.getElementById('outer5SegmentValue');
+        if (segmentValue) {
+            segmentValue.textContent = (params.outerCircle5.segmentLength * 100).toFixed(1) + '% (实际: ' + (actualLength * 100).toFixed(1) + '%)';
+        }
+    }
+    if (outer5SelfRot) {
+        outer5SelfRot.value = params.outerCircle5.selfRotation;
+        const valueDisplay = document.getElementById('outer5SelfRotValue');
+        if (valueDisplay) valueDisplay.textContent = params.outerCircle5.selfRotation.toFixed(3);
+    }
+    if (outer5GlobalRot) {
+        outer5GlobalRot.value = params.outerCircle5.globalRotation;
+        const valueDisplay = document.getElementById('outer5GlobalRotValue');
+        if (valueDisplay) valueDisplay.textContent = params.outerCircle5.globalRotation.toFixed(3);
+    }
+    if (outer5WaveHeight) {
+        outer5WaveHeight.value = params.outerCircle5.waveHeight;
+        const valueDisplay = document.getElementById('outer5WaveHeightValue');
+        if (valueDisplay) valueDisplay.textContent = params.outerCircle5.waveHeight.toFixed(1) + 'x';
+    }
+
+    // 更新圆6控件
+    const outer6Radius = document.getElementById('outer6Radius');
+    const outer6SegmentCount = document.getElementById('outer6SegmentCount');
+    const outer6Segment = document.getElementById('outer6Segment');
+    const outer6SelfRot = document.getElementById('outer6SelfRot');
+    const outer6GlobalRot = document.getElementById('outer6GlobalRot');
+    const outer6WaveHeight = document.getElementById('outer6WaveHeight');
+
+    if (outer6Radius) {
+        outer6Radius.value = params.outerCircle6.radius;
+        const valueDisplay = document.getElementById('outer6RadiusValue');
+        if (valueDisplay) valueDisplay.textContent = (params.outerCircle6.radius * 100).toFixed(1) + '%';
+    }
+    if (outer6SegmentCount) {
+        outer6SegmentCount.value = params.outerCircle6.segmentCount;
+        const valueDisplay = document.getElementById('outer6SegmentCountValue');
+        if (valueDisplay) valueDisplay.textContent = params.outerCircle6.segmentCount;
+        // 更新分段长度显示
+        const initialUnit = 1.0 / params.outerCircle6.segmentCount;
+        const actualLength = initialUnit * (1 + params.outerCircle6.segmentLength);
+        const segmentValue = document.getElementById('outer6SegmentValue');
+        if (segmentValue) {
+            segmentValue.textContent = (params.outerCircle6.segmentLength * 100).toFixed(1) + '% (实际: ' + (actualLength * 100).toFixed(1) + '%)';
+        }
+    }
+    if (outer6Segment) {
+        outer6Segment.value = params.outerCircle6.segmentLength;
+        const initialUnit = 1.0 / params.outerCircle6.segmentCount;
+        const actualLength = initialUnit * (1 + params.outerCircle6.segmentLength);
+        const segmentValue = document.getElementById('outer6SegmentValue');
+        if (segmentValue) {
+            segmentValue.textContent = (params.outerCircle6.segmentLength * 100).toFixed(1) + '% (实际: ' + (actualLength * 100).toFixed(1) + '%)';
+        }
+    }
+    if (outer6SelfRot) {
+        outer6SelfRot.value = params.outerCircle6.selfRotation;
+        const valueDisplay = document.getElementById('outer6SelfRotValue');
+        if (valueDisplay) valueDisplay.textContent = params.outerCircle6.selfRotation.toFixed(3);
+    }
+    if (outer6GlobalRot) {
+        outer6GlobalRot.value = params.outerCircle6.globalRotation;
+        const valueDisplay = document.getElementById('outer6GlobalRotValue');
+        if (valueDisplay) valueDisplay.textContent = params.outerCircle6.globalRotation.toFixed(3);
+    }
+    if (outer6WaveHeight) {
+        outer6WaveHeight.value = params.outerCircle6.waveHeight;
+        const valueDisplay = document.getElementById('outer6WaveHeightValue');
+        if (valueDisplay) valueDisplay.textContent = params.outerCircle6.waveHeight.toFixed(1) + 'x';
     }
 }
 
@@ -1112,18 +1671,17 @@ function stopRecording() {
 // Initialize voiceprint rings based on current circle configuration
 function initializeVoiceprintRings() {
     const maxRadius = config.maxRadius * 0.5;
-    const fourCircles = calculateFourCircles();
+    const threeCircles = calculateFourCircles(); // 现在只返回3个圆（Circle 1, 2, 3）
 
-    // Add rings for inner 4 circles (standard circles)
+    // Add rings for inner 3 circles (standard circles)
     // 增加样本数到3倍（180 -> 540），让柱状图更细更密集
     const firstRingSampleCount = 540; // Number of samples for first ring
-    fourCircles.forEach((circle, index) => {
+    threeCircles.forEach((circle, index) => {
         const samplesPerRing = 540; // Number of samples per ring
         // Calculate start global index: each ring starts at 25% of previous ring
         // Ring 0: starts at 0
         // Ring 1: starts at ring0.sampleCount * 0.25
         // Ring 2: starts at ring0.sampleCount * 0.5
-        // Ring 3: starts at ring0.sampleCount * 0.75
         const startGlobalIndex = Math.floor(firstRingSampleCount * index * 0.25);
         voiceprintData.rings.push({
             type: 'circle', // Standard circle
@@ -1135,6 +1693,33 @@ function initializeVoiceprintRings() {
             sampleIndex: 0, // Independent sample index for this ring
             startGlobalIndex: startGlobalIndex // Global index when this ring starts recording
         });
+    });
+
+    // Circle 4 - segmented path (now also segmented like circle 5 and 6)
+    const r4 = config.maxRadius * params.innerCircle4.radius;
+    const segmentCount4 = params.innerCircle4.segmentCount;
+    const initialUnit4 = 1.0 / segmentCount4;
+    const actualSegmentLength4 = initialUnit4 * (1 + params.innerCircle4.segmentLength);
+    const segmentAngleSize4 = actualSegmentLength4 * Math.PI * 2;
+    const gapSize4 = (Math.PI * 2 - segmentAngleSize4 * segmentCount4) / segmentCount4;
+
+    // Circle 3 (index 2) starts at firstRingSampleCount * 0.5
+    // Circle 4 (index 3) starts at firstRingSampleCount * 0.75
+    const startGlobalIndex4 = Math.floor(firstRingSampleCount * 3 * 0.25);
+    voiceprintData.rings.push({
+        type: 'segmented', // Segmented circle
+        baseRadius: r4,
+        centerX: config.centerX + config.maxRadius * params.innerCircle4.offsetX,
+        centerY: config.centerY + config.maxRadius * params.innerCircle4.offsetY,
+        segmentCount: segmentCount4,
+        segmentAngleSize: segmentAngleSize4,
+        gapSize: gapSize4,
+        globalRotation: params.innerCircle4.globalRotation,
+        selfRotation: params.innerCircle4.selfRotation,
+        samples: new Array(720).fill(0),
+        sampleCount: 720,
+        sampleIndex: 0, // Independent sample index for this ring
+        startGlobalIndex: startGlobalIndex4 // Global index when this ring starts recording
     });
 
     // Add rings for outer circles (segmented paths)
@@ -1327,14 +1912,152 @@ function drawVoiceprint() {
     });
 }
 
+// Helper: Get interpolated palette based on color transition progress
+function getInterpolatedPalette() {
+    if (colorTransitionProgress === 0) {
+        // 如果颜色过渡为0，使用当前选择的配色方案
+        return PALETTES[voiceprintSettings.colorMode] || PALETTES['romantic-classic'];
+    }
+    
+    // 计算当前应该使用的两个配色方案
+    const totalPalettes = COLOR_PALETTE_ORDER.length;
+    const progress = (colorTransitionProgress / 100) * totalPalettes;
+    const index1 = Math.floor(progress) % totalPalettes;
+    const index2 = (index1 + 1) % totalPalettes; // 循环到第一个
+    
+    const palette1Key = COLOR_PALETTE_ORDER[index1];
+    const palette2Key = COLOR_PALETTE_ORDER[index2];
+    const palette1 = PALETTES[palette1Key];
+    const palette2 = PALETTES[palette2Key];
+    
+    // 计算插值比例 (0-1)
+    const t = progress - Math.floor(progress);
+    
+    // 如果两个配色方案类型相同，直接插值
+    if (palette1.type === palette2.type) {
+        return interpolatePalette(palette1, palette2, t);
+    } else {
+        // 如果类型不同，根据t选择更接近的
+        return t < 0.5 ? palette1 : palette2;
+    }
+}
+
+// Helper: Interpolate between two palettes of the same type
+function interpolatePalette(palette1, palette2, t) {
+    if (palette1.type === 'romantic' && palette2.type === 'romantic') {
+        // 插值romantic类型的配色方案
+        const rings = [];
+        const maxRings = Math.max(palette1.rings.length, palette2.rings.length);
+        for (let i = 0; i < maxRings; i++) {
+            const color1 = hexToHsl(palette1.rings[i % palette1.rings.length]);
+            const color2 = hexToHsl(palette2.rings[i % palette2.rings.length]);
+            const h = lerpAngle(color1.h, color2.h, t);
+            const s = lerp(color1.s, color2.s, t);
+            const l = lerp(color1.l, color2.l, t);
+            // 转换回hex格式以保持一致性
+            rings.push(hslToHex(h, s, l));
+        }
+        return { type: 'romantic', rings: rings };
+    } else if (palette1.type === 'gradient' && palette2.type === 'gradient') {
+        // 插值gradient类型的配色方案
+        const h1 = lerpAngle(palette1.start.h, palette2.start.h, t);
+        const s1 = lerp(palette1.start.s, palette2.start.s, t);
+        const l1 = lerp(palette1.start.l, palette2.start.l, t);
+        const h2 = lerpAngle(palette1.end.h, palette2.end.h, t);
+        const s2 = lerp(palette1.end.s, palette2.end.s, t);
+        const l2 = lerp(palette1.end.l, palette2.end.l, t);
+        return {
+            type: 'gradient',
+            start: { h: h1, s: s1, l: l1 },
+            end: { h: h2, s: s2, l: l2 }
+        };
+    } else if (palette1.type === 'monochrome' && palette2.type === 'monochrome') {
+        // 插值monochrome类型的配色方案
+        const h = lerpAngle(palette1.h, palette2.h, t);
+        const s = lerp(palette1.s, palette2.s, t);
+        const l = lerp(palette1.l, palette2.l, t);
+        return { type: 'monochrome', h: h, s: s, l: l };
+    }
+    
+    // 如果类型不匹配，返回第一个
+    return palette1;
+}
+
+// Helper: Convert hex color to HSL
+function hexToHsl(hex) {
+    const r = parseInt(hex.slice(1, 3), 16) / 255;
+    const g = parseInt(hex.slice(3, 5), 16) / 255;
+    const b = parseInt(hex.slice(5, 7), 16) / 255;
+    
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    let h, s, l = (max + min) / 2;
+    
+    if (max === min) {
+        h = s = 0; // achromatic
+    } else {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch (max) {
+            case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+            case g: h = ((b - r) / d + 2) / 6; break;
+            case b: h = ((r - g) / d + 4) / 6; break;
+        }
+    }
+    
+    return { h: h * 360, s: s * 100, l: l * 100 };
+}
+
+// Helper: Convert HSL to hex color
+function hslToHex(h, s, l) {
+    h = h / 360;
+    s = s / 100;
+    l = l / 100;
+    
+    let r, g, b;
+    
+    if (s === 0) {
+        r = g = b = l; // achromatic
+    } else {
+        const hue2rgb = (p, q, t) => {
+            if (t < 0) t += 1;
+            if (t > 1) t -= 1;
+            if (t < 1/6) return p + (q - p) * 6 * t;
+            if (t < 1/2) return q;
+            if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+            return p;
+        };
+        
+        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        const p = 2 * l - q;
+        r = hue2rgb(p, q, h + 1/3);
+        g = hue2rgb(p, q, h);
+        b = hue2rgb(p, q, h - 1/3);
+    }
+    
+    const toHex = (c) => {
+        const hex = Math.round(c * 255).toString(16);
+        return hex.length === 1 ? '0' + hex : hex;
+    };
+    
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+// Helper: Linear interpolation for angles (handles 360° wrap)
+function lerpAngle(a1, a2, t) {
+    const diff = ((a2 - a1 + 180) % 360) - 180;
+    return (a1 + diff * t + 360) % 360;
+}
+
 // Helper: Get color based on amplitude (Neon Rose Palette)
 let lastLoggedMode = null;
 function getAmplitudeColor(amplitude, ringIndex = 0) {
-    const modeKey = voiceprintSettings.colorMode;
-    const palette = PALETTES[modeKey] || PALETTES['romantic-classic']; // Fallback
+    // 使用插值后的配色方案
+    const palette = getInterpolatedPalette();
     const type = palette.type;
 
     // Debug: Log once per mode change
+    const modeKey = voiceprintSettings.colorMode;
     if (lastLoggedMode !== modeKey) {
         console.log(`🎨 getAmplitudeColor called with mode: ${modeKey}, type: ${type}, ringIndex: ${ringIndex}`);
         lastLoggedMode = modeKey;
@@ -1350,16 +2073,28 @@ function getAmplitudeColor(amplitude, ringIndex = 0) {
         // Note: For true "romantic" feel, we might want to keep colors stable or just brighten slightly.
         return baseColorHex;
     } else if (type === 'gradient') {
-        // Gradient: Interpolate based on amplitude
+        // Gradient: Interpolate based on ringIndex (center to edge) and amplitude
+        // Total rings: 6 (inner 4 circles + outer 2 circles)
+        const maxRings = 6;
+        const ringT = ringIndex / (maxRings - 1); // 0 (center) to 1 (edge) - position-based gradient
+        
         const start = palette.start;
         const end = palette.end;
-
-        const t = amplitude;
-        const h = start.h + (end.h - start.h) * t;
-        const s = start.s + (end.s - start.s) * t;
-        const l = start.l + (end.l - start.l) * t;
-
-        return `hsl(${h}, ${s}%, ${l}%)`;
+        
+        // Base color based on ring position (center = dark, edge = light)
+        const baseH = start.h + (end.h - start.h) * ringT;
+        const baseS = start.s + (end.s - start.s) * ringT;
+        const baseL = start.l + (end.l - start.l) * ringT;
+        
+        // Further brighten based on amplitude (0 = base color, 1 = brighter)
+        // Amplitude adds extra brightness and saturation
+        const amplitudeBoost = amplitude * 0.3; // 0-30% additional brightness
+        const amplitudeSaturation = amplitude * 0.2; // 0-20% additional saturation
+        
+        const finalL = Math.min(100, baseL + amplitudeBoost * 100);
+        const finalS = Math.min(100, baseS + amplitudeSaturation * 100);
+        
+        return `hsl(${baseH}, ${finalS}%, ${finalL}%)`;
     } else if (type === 'monochrome') {
         // Monochrome: Fixed Hue, modulate Lightness
         const base = palette;
@@ -1373,8 +2108,8 @@ function getAmplitudeColor(amplitude, ringIndex = 0) {
 
 // Helper: Get base layer color (for outline circles)
 function getBaseLayerColor(ringIndex) {
-    const modeKey = voiceprintSettings.colorMode;
-    const palette = PALETTES[modeKey] || PALETTES['romantic-classic'];
+    // 使用插值后的配色方案
+    const palette = getInterpolatedPalette();
     const type = palette.type;
 
     if (type === 'romantic') {
@@ -1382,9 +2117,20 @@ function getBaseLayerColor(ringIndex) {
         const rings = palette.rings;
         return rings[ringIndex % rings.length];
     } else if (type === 'gradient') {
-        // For gradient mode, use the start color for all base layers
+        // For gradient mode, interpolate from center (start) to edge (end) based on ringIndex
+        // Total rings: 6 (inner 4 circles + outer 2 circles)
+        const maxRings = 6;
+        const t = ringIndex / (maxRings - 1); // 0 (center) to 1 (edge)
+        
         const start = palette.start;
-        return `hsl(${start.h}, ${start.s}%, ${start.l}%)`;
+        const end = palette.end;
+        
+        // Interpolate HSL values: from dark (start) to light/bright (end)
+        const h = start.h + (end.h - start.h) * t;
+        const s = start.s + (end.s - start.s) * t;
+        const l = start.l + (end.l - start.l) * t;
+        
+        return `hsl(${h}, ${s}%, ${l}%)`;
     } else if (type === 'monochrome') {
         // For monochrome, use the base color
         return `hsl(${palette.h}, ${palette.s}%, ${palette.l}%)`;
@@ -1401,16 +2147,16 @@ function smoothPoint(ring, index, maxSamples) {
 }
 
 // Draw voiceprint on standard circle
-// Draw voiceprint on standard circle
+// Draw voiceprint on standard circle (for Circle 1, 2, 3)
 function drawCircleVoiceprint(ring, ringIndex, maxSamples) {
     const style = voiceprintSettings.style;
 
     // Get LIVE geometry from params instead of cached ring values
-    const fourCircles = calculateFourCircles();
-    // Safety check: if ringIndex is out of bounds for inner circles (0-3)
-    if (ringIndex >= fourCircles.length) return;
+    const threeCircles = calculateFourCircles(); // 现在只返回3个圆
+    // Safety check: if ringIndex is out of bounds for inner circles (0-2)
+    if (ringIndex >= threeCircles.length) return;
 
-    const liveCircle = fourCircles[ringIndex];
+    const liveCircle = threeCircles[ringIndex];
     const centerX = liveCircle.cx;
     const centerY = liveCircle.cy;
     const baseRadius = liveCircle.radius;
@@ -1601,9 +2347,167 @@ function drawCircleVoiceprint(ring, ringIndex, maxSamples) {
             ctx.arc(x, y, size, 0, Math.PI * 2);
             ctx.fill();
         }
+    } else if (style === 'smooth-filled') {
+        // Smooth filled waveform - filled area with smooth curves
+        ctx.shadowBlur = 5;
+        
+        // 获取当前圆圈的声波高度缩放因子
+        const waveHeightScale = params.innerCircles[ringIndex].waveHeight || 1.0;
+        // 计算基础高度和用户声音高度的占比
+        const baseHeightRatio = voiceprintSettings.baseHeightRatio;
+        const voiceHeightRatio = 1.0 - baseHeightRatio;
+        const baseVariation = 50 * baseHeightRatio;
+        const voiceVariation = 50 * voiceHeightRatio;
+
+        // Get base color
+        const baseColor = getBaseLayerColor(ringIndex);
+        
+        // Create filled path
+        ctx.beginPath();
+        for (let i = 0; i <= maxSamples; i++) {
+            const idx = i % maxSamples;
+            const amplitude = ring.samples[idx] || 0;
+            const angle = (idx / ring.sampleCount) * Math.PI * 2;
+            const variation = (baseVariation + amplitude * voiceVariation) * waveHeightScale;
+            const r = baseRadius + variation;
+            const x = centerX + Math.cos(angle) * r;
+            const y = centerY + Math.sin(angle) * r;
+            
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        ctx.closePath();
+        
+        // Create gradient fill
+        const gradient = ctx.createRadialGradient(centerX, centerY, baseRadius * 0.5, centerX, centerY, baseRadius * 1.5);
+        gradient.addColorStop(0, getGradientColor(baseColor, 0.3));
+        gradient.addColorStop(0.5, getGradientColor(baseColor, 0.6));
+        gradient.addColorStop(1, getGradientColor(baseColor, 1.0));
+        
+        ctx.fillStyle = gradient;
+        ctx.shadowColor = baseColor;
+        ctx.fill();
+        
+    } else if (style === 'neon-outline') {
+        // Neon outline effect - glowing outline with neon colors
+        ctx.shadowBlur = 15;
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        
+        // 获取当前圆圈的声波高度缩放因子
+        const waveHeightScale = params.innerCircles[ringIndex].waveHeight || 1.0;
+        // 计算基础高度和用户声音高度的占比
+        const baseHeightRatio = voiceprintSettings.baseHeightRatio;
+        const voiceHeightRatio = 1.0 - baseHeightRatio;
+        const baseVariation = 50 * baseHeightRatio;
+        const voiceVariation = 50 * voiceHeightRatio;
+
+        // Draw outline path
+        ctx.beginPath();
+        for (let i = 0; i <= maxSamples; i++) {
+            const idx = i % maxSamples;
+            const amplitude = ring.samples[idx] || 0;
+            const angle = (idx / ring.sampleCount) * Math.PI * 2;
+            const variation = (baseVariation + amplitude * voiceVariation) * waveHeightScale;
+            const r = baseRadius + variation;
+            const x = centerX + Math.cos(angle) * r;
+            const y = centerY + Math.sin(angle) * r;
+            
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        ctx.closePath();
+        
+        // Use amplitude-based color with strong glow
+        const avgAmplitude = ring.samples.slice(0, maxSamples).reduce((a, b) => a + (b || 0), 0) / maxSamples;
+        const color = getAmplitudeColor(avgAmplitude, ringIndex);
+        ctx.strokeStyle = color;
+        ctx.shadowColor = color;
+        ctx.stroke();
+        
+    } else if (style === 'classic-wave') {
+        // Classic waveform - smooth connected lines
+        ctx.shadowBlur = 3;
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        
+        // 获取当前圆圈的声波高度缩放因子
+        const waveHeightScale = params.innerCircles[ringIndex].waveHeight || 1.0;
+        // 计算基础高度和用户声音高度的占比
+        const baseHeightRatio = voiceprintSettings.baseHeightRatio;
+        const voiceHeightRatio = 1.0 - baseHeightRatio;
+        const baseVariation = 50 * baseHeightRatio;
+        const voiceVariation = 50 * voiceHeightRatio;
+
+        // Get base color
+        const baseColor = getBaseLayerColor(ringIndex);
+        
+        // Draw smooth wave path
+        ctx.beginPath();
+        for (let i = 0; i < maxSamples; i++) {
+            const amplitude = ring.samples[i] || 0;
+            const angle = (i / ring.sampleCount) * Math.PI * 2;
+            const variation = (baseVariation + amplitude * voiceVariation) * waveHeightScale;
+            const r = baseRadius + variation;
+            const x = centerX + Math.cos(angle) * r;
+            const y = centerY + Math.sin(angle) * r;
+            
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                // Use smooth curve interpolation
+                const prevIdx = (i - 1 + maxSamples) % maxSamples;
+                const prevAmplitude = ring.samples[prevIdx] || 0;
+                const prevAngle = (prevIdx / ring.sampleCount) * Math.PI * 2;
+                const prevVariation = (baseVariation + prevAmplitude * voiceVariation) * waveHeightScale;
+                const prevR = baseRadius + prevVariation;
+                const prevX = centerX + Math.cos(prevAngle) * prevR;
+                const prevY = centerY + Math.sin(prevAngle) * prevR;
+                
+                // Quadratic curve for smoothness
+                const cpX = (prevX + x) / 2;
+                const cpY = (prevY + y) / 2;
+                ctx.quadraticCurveTo(cpX, cpY, x, y);
+            }
+        }
+        
+        // Close the path smoothly
+        if (maxSamples > 0) {
+            const firstAmplitude = ring.samples[0] || 0;
+            const firstAngle = 0;
+            const firstVariation = (baseVariation + firstAmplitude * voiceVariation) * waveHeightScale;
+            const firstR = baseRadius + firstVariation;
+            const firstX = centerX + Math.cos(firstAngle) * firstR;
+            const firstY = centerY + Math.sin(firstAngle) * firstR;
+            
+            const lastIdx = maxSamples - 1;
+            const lastAmplitude = ring.samples[lastIdx] || 0;
+            const lastAngle = (lastIdx / ring.sampleCount) * Math.PI * 2;
+            const lastVariation = (baseVariation + lastAmplitude * voiceVariation) * waveHeightScale;
+            const lastR = baseRadius + lastVariation;
+            const lastX = centerX + Math.cos(lastAngle) * lastR;
+            const lastY = centerY + Math.sin(lastAngle) * lastR;
+            
+            const cpX = (lastX + firstX) / 2;
+            const cpY = (lastY + firstY) / 2;
+            ctx.quadraticCurveTo(cpX, cpY, firstX, firstY);
+        }
+        
+        ctx.strokeStyle = baseColor;
+        ctx.shadowColor = baseColor;
+        ctx.stroke();
+        
     } else {
-        // Generic fallback for other styles
-        ctx.shadowBlur = 5; // 降低阴影模糊度以提升性能（从10降到5）
+        // Generic fallback for unknown styles
+        ctx.shadowBlur = 5;
 
         // 获取当前圆圈的声波高度缩放因子
         const waveHeightScale = params.innerCircles[ringIndex].waveHeight || 1.0;
@@ -1634,19 +2538,47 @@ function drawCircleVoiceprint(ring, ringIndex, maxSamples) {
     }
 }
 
-// Draw voiceprint on segmented path (Circle 5 and 6)
+// Helper: Calculate fade alpha based on position in segment (0-1)
+// fadeRatio: 渐变区域占分段长度的比例（使用全局变量 segmentFadeRatio）
+function getSegmentFadeAlpha(t, fadeRatio = null) {
+    // 如果没有传入 fadeRatio，使用全局变量
+    if (fadeRatio === null) {
+        fadeRatio = segmentFadeRatio;
+    }
+    if (t < fadeRatio) {
+        // 开始渐变：从透明到不透明
+        return t / fadeRatio;
+    } else if (t > (1 - fadeRatio)) {
+        // 结束渐变：从不透明到透明
+        return (1 - t) / fadeRatio;
+    } else {
+        // 中间区域：完全不透明
+        return 1.0;
+    }
+}
+
+// Draw voiceprint on segmented path (Circle 4, 5 and 6)
 // Draws samples in the SAME ORDER they were recorded (sequentially across all segments)
 function drawSegmentedVoiceprint(ring, ringIndex, maxSamples) {
     const style = voiceprintSettings.style;
 
     // Get LIVE geometry from params
     let circleParams;
-    if (ringIndex === 4) circleParams = params.outerCircle5;
+    if (ringIndex === 3) circleParams = params.innerCircle4;
+    else if (ringIndex === 4) circleParams = params.outerCircle5;
     else if (ringIndex === 5) circleParams = params.outerCircle6;
     else return;
 
     const numSegments = circleParams.segmentCount;
     const baseRadius = config.maxRadius * circleParams.radius;
+    
+    // Get center position (circle 4 has offset, circles 5 and 6 are centered)
+    const centerX = circleParams.offsetX !== undefined 
+        ? config.centerX + config.maxRadius * circleParams.offsetX 
+        : config.centerX;
+    const centerY = circleParams.offsetY !== undefined 
+        ? config.centerY + config.maxRadius * circleParams.offsetY 
+        : config.centerY;
 
     // Calculate segment geometry
     const initialUnit = 1.0 / numSegments;
@@ -1678,6 +2610,10 @@ function drawSegmentedVoiceprint(ring, ringIndex, maxSamples) {
         // 优化：所有花瓣同时绘制，每个花瓣从自己的起点持续绘制到终点
         // 所有segment同时开始，使用相同的样本数据，从0持续绘制到actualSamplesToDraw
 
+        // 计算渐变区域比例（10%）
+        const fadeRatio = segmentFadeRatio;
+        const savedAlpha = ctx.globalAlpha;
+        
         // 外层循环：遍历样本位置（所有segment共享相同的进度）
         for (let posInSegment = 0; posInSegment < actualSamplesToDraw - 1; posInSegment++) {
             // 所有segment使用相同的样本索引（克隆体模式）
@@ -1689,54 +2625,79 @@ function drawSegmentedVoiceprint(ring, ringIndex, maxSamples) {
             // 优化：在此处设置样式，因为同一时刻所有花瓣颜色相同
             ctx.strokeStyle = getAmplitudeColor(avgAmplitude, ringIndex);
             ctx.shadowColor = getAmplitudeColor(avgAmplitude, ringIndex);
-            ctx.beginPath();
 
             // 内层循环：同时绘制所有segment（花瓣）
             for (let segmentIdx = 0; segmentIdx < numSegments; segmentIdx++) {
                 // Calculate segment angles (pre-calculate for efficiency)
                 const segmentStartAngle = circleParams.globalRotation + segmentIdx * (segmentAngleSize + gapSize);
                 const segmentMidAngle = segmentStartAngle + segmentAngleSize * 0.5;
-                const centerX = config.centerX + Math.cos(segmentMidAngle) * baseRadius;
-                const centerY = config.centerY + Math.sin(segmentMidAngle) * baseRadius;
+                const segmentCenterX = centerX + Math.cos(segmentMidAngle) * baseRadius;
+                const segmentCenterY = centerY + Math.sin(segmentMidAngle) * baseRadius;
 
                 // Calculate angles（每个segment从自己的起点开始绘制）
                 // t基于固定的maxSamplesPerSegment计算，而不是基于动态的actualSamplesToDraw
                 const t1 = posInSegment / maxSamplesPerSegment;
                 const t2 = (posInSegment + 1) / maxSamplesPerSegment;
+                
+                // 计算透明度：在分段开始和结束处渐变
+                let alpha1 = 1.0;
+                let alpha2 = 1.0;
+                if (t1 < fadeRatio) {
+                    // 开始渐变：从透明到不透明
+                    alpha1 = t1 / fadeRatio;
+                } else if (t1 > (1 - fadeRatio)) {
+                    // 结束渐变：从不透明到透明
+                    alpha1 = (1 - t1) / fadeRatio;
+                }
+                if (t2 < fadeRatio) {
+                    alpha2 = t2 / fadeRatio;
+                } else if (t2 > (1 - fadeRatio)) {
+                    alpha2 = (1 - t2) / fadeRatio;
+                }
+                
+                // 使用平均透明度
+                const alpha = (alpha1 + alpha2) / 2;
+                ctx.globalAlpha = savedAlpha * alpha;
+                
                 const angle1 = segmentStartAngle + t1 * segmentAngleSize;
                 const angle2 = segmentStartAngle + t2 * segmentAngleSize;
 
                 // Calculate points (基础 + 用户声音)
-                const variation1 = (baseVariation + amplitude1 * voiceVariation) * waveHeightScale;
-                const variation2 = (baseVariation + amplitude2 * voiceVariation) * waveHeightScale;
+                // 在渐变区域，声纹高度也要乘以透明度系数
+                const variation1 = (baseVariation + amplitude1 * voiceVariation) * waveHeightScale * alpha1;
+                const variation2 = (baseVariation + amplitude2 * voiceVariation) * waveHeightScale * alpha2;
                 const r1 = baseRadius + variation1;
                 const r2 = baseRadius + variation2;
 
-                const ox1 = config.centerX + Math.cos(angle1) * r1;
-                const oy1 = config.centerY + Math.sin(angle1) * r1;
-                const ox2 = config.centerX + Math.cos(angle2) * r2;
-                const oy2 = config.centerY + Math.sin(angle2) * r2;
+                const ox1 = centerX + Math.cos(angle1) * r1;
+                const oy1 = centerY + Math.sin(angle1) * r1;
+                const ox2 = centerX + Math.cos(angle2) * r2;
+                const oy2 = centerY + Math.sin(angle2) * r2;
 
                 // Apply self-rotation
-                const dx1 = ox1 - centerX;
-                const dy1 = oy1 - centerY;
+                const dx1 = ox1 - segmentCenterX;
+                const dy1 = oy1 - segmentCenterY;
                 const rx1 = dx1 * cosRot - dy1 * sinRot;
                 const ry1 = dx1 * sinRot + dy1 * cosRot;
-                const x1 = centerX + rx1;
-                const y1 = centerY + ry1;
+                const x1 = segmentCenterX + rx1;
+                const y1 = segmentCenterY + ry1;
 
-                const dx2 = ox2 - centerX;
-                const dy2 = oy2 - centerY;
+                const dx2 = ox2 - segmentCenterX;
+                const dy2 = oy2 - segmentCenterY;
                 const rx2 = dx2 * cosRot - dy2 * sinRot;
                 const ry2 = dx2 * sinRot + dy2 * cosRot;
-                const x2 = centerX + rx2;
-                const y2 = centerY + ry2;
+                const x2 = segmentCenterX + rx2;
+                const y2 = segmentCenterY + ry2;
 
+                ctx.beginPath();
                 ctx.moveTo(x1, y1);
                 ctx.lineTo(x2, y2);
+                ctx.stroke();
             }
-            ctx.stroke();
         }
+        
+        // 恢复globalAlpha
+        ctx.globalAlpha = savedAlpha;
     } else if (style === 'spectrum-bars') {
         ctx.shadowBlur = 3; // 降低阴影模糊度以提升性能（从8降到3）
 
@@ -1766,22 +2727,26 @@ function drawSegmentedVoiceprint(ring, ringIndex, maxSamples) {
             const baseColor = getBaseLayerColor(ringIndex);
             const segmentStartAngle = circleParams.globalRotation + segmentIdx * (segmentAngleSize + gapSize);
             const segmentMidAngle = segmentStartAngle + segmentAngleSize * 0.5;
-            const centerX = config.centerX + Math.cos(segmentMidAngle) * baseRadius;
-            const centerY = config.centerY + Math.sin(segmentMidAngle) * baseRadius;
+            const segmentCenterX = centerX + Math.cos(segmentMidAngle) * baseRadius;
+            const segmentCenterY = centerY + Math.sin(segmentMidAngle) * baseRadius;
             const baseColorDark = getGradientColor(baseColor, 0);
 
             segmentCache.push({
                 baseColor,
                 baseColorDark,
                 segmentStartAngle,
-                centerX,
-                centerY
+                centerX: segmentCenterX,
+                centerY: segmentCenterY
             });
         }
 
         // 优化：所有花瓣同时绘制，每个花瓣从自己的起点持续绘制到终点
         // 所有segment同时开始，使用相同的样本数据，从0持续绘制到actualSamplesToDraw
 
+        // 计算渐变区域比例（10%）
+        const fadeRatio = segmentFadeRatio;
+        const savedAlpha = ctx.globalAlpha;
+        
         // 外层循环：遍历样本位置（所有segment共享相同的进度）
         for (let posInSegment = 0; posInSegment < actualSamplesToDraw; posInSegment++) {
             // 所有segment使用相同的样本索引（克隆体模式）
@@ -1790,6 +2755,10 @@ function drawSegmentedVoiceprint(ring, ringIndex, maxSamples) {
 
             // 预计算t值（所有segment共享）
             const t = posInSegment / maxSamplesPerSegment;
+            
+            // 计算透明度
+            const alpha = getSegmentFadeAlpha(t, fadeRatio);
+            ctx.globalAlpha = savedAlpha * alpha;
 
             // 内层循环：同时绘制所有segment（花瓣）
             for (let segmentIdx = 0; segmentIdx < numSegments; segmentIdx++) {
@@ -1802,14 +2771,15 @@ function drawSegmentedVoiceprint(ring, ringIndex, maxSamples) {
                 const cosA = Math.cos(angle);
                 const sinA = Math.sin(angle);
 
-                // Calculate base and tip points
-                const ox1 = config.centerX + cosA * baseRadius;
-                const oy1 = config.centerY + sinA * baseRadius;
+                // Calculate base and tip points (using circle center, not canvas center)
+                const ox1 = centerX + cosA * baseRadius;
+                const oy1 = centerY + sinA * baseRadius;
 
-                // 计算实际高度：基础高度 + 用户声音高度 * 振幅，然后乘以缩放因子
-                const barLength = (baseHeight + amplitude * voiceHeight) * waveHeightScale;
-                const ox2 = config.centerX + cosA * (baseRadius + barLength);
-                const oy2 = config.centerY + sinA * (baseRadius + barLength);
+                // 计算实际高度：基础高度 + 用户声音高度 * 振幅，然后乘以缩放因子和透明度
+                // 在渐变区域，声纹高度也要乘以透明度系数
+                const barLength = (baseHeight + amplitude * voiceHeight) * waveHeightScale * alpha;
+                const ox2 = centerX + cosA * (baseRadius + barLength);
+                const oy2 = centerY + sinA * (baseRadius + barLength);
 
                 // Apply self-rotation
                 const dx1 = ox1 - cache.centerX;
@@ -1855,6 +2825,346 @@ function drawSegmentedVoiceprint(ring, ringIndex, maxSamples) {
                 ctx.fill();
             }
         }
+        
+        // 恢复globalAlpha
+        ctx.globalAlpha = savedAlpha;
+    } else if (style === 'smooth-filled') {
+        // Smooth filled waveform for segmented petals
+        ctx.shadowBlur = 5;
+        const baseColor = getBaseLayerColor(ringIndex);
+        const fadeRatio = segmentFadeRatio;
+        const savedAlpha = ctx.globalAlpha;
+        
+        // Draw each segment as a filled path
+        for (let segmentIdx = 0; segmentIdx < numSegments; segmentIdx++) {
+            const segmentStartAngle = circleParams.globalRotation + segmentIdx * (segmentAngleSize + gapSize);
+            const segmentMidAngle = segmentStartAngle + segmentAngleSize * 0.5;
+            const segmentCenterX = centerX + Math.cos(segmentMidAngle) * baseRadius;
+            const segmentCenterY = centerY + Math.sin(segmentMidAngle) * baseRadius;
+            
+            ctx.beginPath();
+            for (let posInSegment = 0; posInSegment <= actualSamplesToDraw; posInSegment++) {
+                const sampleIdx = posInSegment % actualSamplesToDraw;
+                const amplitude = ring.samples[sampleIdx] || 0;
+                const t = posInSegment / maxSamplesPerSegment;
+                
+                // 计算透明度
+                const alpha = getSegmentFadeAlpha(t, fadeRatio);
+                ctx.globalAlpha = savedAlpha * alpha;
+                
+                const angle = segmentStartAngle + t * segmentAngleSize;
+                
+                // 在渐变区域，声纹高度也要乘以透明度系数
+                const variation = (baseVariation + amplitude * voiceVariation) * waveHeightScale * alpha;
+                const r = baseRadius + variation;
+                const ox = centerX + Math.cos(angle) * r;
+                const oy = centerY + Math.sin(angle) * r;
+                
+                // Apply self-rotation
+                const dx = ox - segmentCenterX;
+                const dy = oy - segmentCenterY;
+                const rx = dx * cosRot - dy * sinRot;
+                const ry = dx * sinRot + dy * cosRot;
+                const x = segmentCenterX + rx;
+                const y = segmentCenterY + ry;
+                
+                if (posInSegment === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.closePath();
+            
+            // Create gradient fill for this segment
+            const gradient = ctx.createRadialGradient(segmentCenterX, segmentCenterY, baseRadius * 0.3, segmentCenterX, segmentCenterY, baseRadius * 1.2);
+            gradient.addColorStop(0, getGradientColor(baseColor, 0.3));
+            gradient.addColorStop(0.5, getGradientColor(baseColor, 0.6));
+            gradient.addColorStop(1, getGradientColor(baseColor, 1.0));
+            
+            ctx.fillStyle = gradient;
+            ctx.shadowColor = baseColor;
+            ctx.fill();
+        }
+        
+        ctx.globalAlpha = savedAlpha;
+        
+    } else if (style === 'neon-outline') {
+        // Neon outline effect for segmented petals
+        ctx.shadowBlur = 15;
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        const fadeRatio = segmentFadeRatio;
+        const savedAlpha = ctx.globalAlpha;
+        
+        // Draw outline for each segment
+        for (let segmentIdx = 0; segmentIdx < numSegments; segmentIdx++) {
+            const segmentStartAngle = circleParams.globalRotation + segmentIdx * (segmentAngleSize + gapSize);
+            const segmentMidAngle = segmentStartAngle + segmentAngleSize * 0.5;
+            const segmentCenterX = centerX + Math.cos(segmentMidAngle) * baseRadius;
+            const segmentCenterY = centerY + Math.sin(segmentMidAngle) * baseRadius;
+            
+            // 分段绘制以实现透明度渐变
+            const fadeSegments = Math.max(1, Math.floor(actualSamplesToDraw * fadeRatio));
+            const solidSegments = actualSamplesToDraw - 2 * fadeSegments;
+            
+            // 开始渐变区域
+            ctx.beginPath();
+            for (let posInSegment = 0; posInSegment <= fadeSegments; posInSegment++) {
+                const sampleIdx = posInSegment % actualSamplesToDraw;
+                const amplitude = ring.samples[sampleIdx] || 0;
+                const t = posInSegment / maxSamplesPerSegment;
+                const alpha = getSegmentFadeAlpha(t, fadeRatio);
+                ctx.globalAlpha = savedAlpha * alpha;
+                
+                const angle = segmentStartAngle + t * segmentAngleSize;
+                const variation = (baseVariation + amplitude * voiceVariation) * waveHeightScale;
+                const r = baseRadius + variation;
+                const ox = centerX + Math.cos(angle) * r;
+                const oy = centerY + Math.sin(angle) * r;
+                const dx = ox - segmentCenterX;
+                const dy = oy - segmentCenterY;
+                const rx = dx * cosRot - dy * sinRot;
+                const ry = dx * sinRot + dy * cosRot;
+                const x = segmentCenterX + rx;
+                const y = segmentCenterY + ry;
+                
+                if (posInSegment === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            const avgAmplitude = ring.samples.slice(0, actualSamplesToDraw).reduce((a, b) => a + (b || 0), 0) / actualSamplesToDraw;
+            const color = getAmplitudeColor(avgAmplitude, ringIndex);
+            ctx.strokeStyle = color;
+            ctx.shadowColor = color;
+            ctx.stroke();
+            
+            // 中间实心区域（alpha = 1.0，但为了代码一致性也乘以alpha）
+            ctx.globalAlpha = savedAlpha;
+            ctx.beginPath();
+            for (let posInSegment = fadeSegments; posInSegment <= fadeSegments + solidSegments; posInSegment++) {
+                const sampleIdx = posInSegment % actualSamplesToDraw;
+                const amplitude = ring.samples[sampleIdx] || 0;
+                const t = posInSegment / maxSamplesPerSegment;
+                const alpha = getSegmentFadeAlpha(t, fadeRatio); // 中间区域alpha=1.0
+                const angle = segmentStartAngle + t * segmentAngleSize;
+                // 在渐变区域，声纹高度也要乘以透明度系数（中间区域alpha=1.0，所以不影响）
+                const variation = (baseVariation + amplitude * voiceVariation) * waveHeightScale * alpha;
+                const r = baseRadius + variation;
+                const ox = centerX + Math.cos(angle) * r;
+                const oy = centerY + Math.sin(angle) * r;
+                const dx = ox - segmentCenterX;
+                const dy = oy - segmentCenterY;
+                const rx = dx * cosRot - dy * sinRot;
+                const ry = dx * sinRot + dy * cosRot;
+                const x = segmentCenterX + rx;
+                const y = segmentCenterY + ry;
+                
+                if (posInSegment === fadeSegments) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.stroke();
+            
+            // 结束渐变区域
+            ctx.beginPath();
+            for (let posInSegment = fadeSegments + solidSegments; posInSegment <= actualSamplesToDraw; posInSegment++) {
+                const sampleIdx = posInSegment % actualSamplesToDraw;
+                const amplitude = ring.samples[sampleIdx] || 0;
+                const t = posInSegment / maxSamplesPerSegment;
+                const alpha = getSegmentFadeAlpha(t, fadeRatio);
+                ctx.globalAlpha = savedAlpha * alpha;
+                
+                const angle = segmentStartAngle + t * segmentAngleSize;
+                const variation = (baseVariation + amplitude * voiceVariation) * waveHeightScale;
+                const r = baseRadius + variation;
+                const ox = centerX + Math.cos(angle) * r;
+                const oy = centerY + Math.sin(angle) * r;
+                const dx = ox - segmentCenterX;
+                const dy = oy - segmentCenterY;
+                const rx = dx * cosRot - dy * sinRot;
+                const ry = dx * sinRot + dy * cosRot;
+                const x = segmentCenterX + rx;
+                const y = segmentCenterY + ry;
+                
+                if (posInSegment === fadeSegments + solidSegments) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.stroke();
+        }
+        
+        ctx.globalAlpha = savedAlpha;
+        
+    } else if (style === 'classic-wave') {
+        // Classic waveform for segmented petals
+        ctx.shadowBlur = 3;
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        
+        const baseColor = getBaseLayerColor(ringIndex);
+        const fadeRatio = segmentFadeRatio;
+        const savedAlpha = ctx.globalAlpha;
+        
+        // Draw smooth wave for each segment
+        for (let segmentIdx = 0; segmentIdx < numSegments; segmentIdx++) {
+            const segmentStartAngle = circleParams.globalRotation + segmentIdx * (segmentAngleSize + gapSize);
+            const segmentMidAngle = segmentStartAngle + segmentAngleSize * 0.5;
+            const segmentCenterX = centerX + Math.cos(segmentMidAngle) * baseRadius;
+            const segmentCenterY = centerY + Math.sin(segmentMidAngle) * baseRadius;
+            
+            // 分段绘制以实现透明度渐变
+            const fadeSegments = Math.max(1, Math.floor(actualSamplesToDraw * fadeRatio));
+            const solidSegments = actualSamplesToDraw - 2 * fadeSegments;
+            
+            // 开始渐变区域
+            ctx.beginPath();
+            for (let posInSegment = 0; posInSegment < fadeSegments; posInSegment++) {
+                const amplitude = ring.samples[posInSegment] || 0;
+                const t = posInSegment / maxSamplesPerSegment;
+                const alpha = getSegmentFadeAlpha(t, fadeRatio);
+                ctx.globalAlpha = savedAlpha * alpha;
+                
+                const angle = segmentStartAngle + t * segmentAngleSize;
+                // 在渐变区域，声纹高度也要乘以透明度系数
+                const variation = (baseVariation + amplitude * voiceVariation) * waveHeightScale * alpha;
+                const r = baseRadius + variation;
+                const ox = centerX + Math.cos(angle) * r;
+                const oy = centerY + Math.sin(angle) * r;
+                const dx = ox - segmentCenterX;
+                const dy = oy - segmentCenterY;
+                const rx = dx * cosRot - dy * sinRot;
+                const ry = dx * sinRot + dy * cosRot;
+                const x = segmentCenterX + rx;
+                const y = segmentCenterY + ry;
+                
+                if (posInSegment === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    const prevIdx = posInSegment - 1;
+                    const prevAmplitude = ring.samples[prevIdx] || 0;
+                    const prevT = prevIdx / maxSamplesPerSegment;
+                    const prevAlpha = getSegmentFadeAlpha(prevT, fadeRatio);
+                    const prevAngle = segmentStartAngle + prevT * segmentAngleSize;
+                    const prevVariation = (baseVariation + prevAmplitude * voiceVariation) * waveHeightScale * prevAlpha;
+                    const prevR = baseRadius + prevVariation;
+                    const prevOx = centerX + Math.cos(prevAngle) * prevR;
+                    const prevOy = centerY + Math.sin(prevAngle) * prevR;
+                    const prevDx = prevOx - segmentCenterX;
+                    const prevDy = prevOy - segmentCenterY;
+                    const prevRx = prevDx * cosRot - prevDy * sinRot;
+                    const prevRy = prevDx * sinRot + prevDy * cosRot;
+                    const prevX = segmentCenterX + prevRx;
+                    const prevY = segmentCenterY + prevRy;
+                    const cpX = (prevX + x) / 2;
+                    const cpY = (prevY + y) / 2;
+                    ctx.quadraticCurveTo(cpX, cpY, x, y);
+                }
+            }
+            ctx.strokeStyle = baseColor;
+            ctx.shadowColor = baseColor;
+            ctx.stroke();
+            
+            // 中间实心区域（alpha = 1.0，但为了代码一致性也乘以alpha）
+            ctx.globalAlpha = savedAlpha;
+            ctx.beginPath();
+            for (let posInSegment = fadeSegments; posInSegment < fadeSegments + solidSegments; posInSegment++) {
+                const amplitude = ring.samples[posInSegment] || 0;
+                const t = posInSegment / maxSamplesPerSegment;
+                const alpha = getSegmentFadeAlpha(t, fadeRatio); // 中间区域alpha=1.0
+                const angle = segmentStartAngle + t * segmentAngleSize;
+                // 在渐变区域，声纹高度也要乘以透明度系数（中间区域alpha=1.0，所以不影响）
+                const variation = (baseVariation + amplitude * voiceVariation) * waveHeightScale * alpha;
+                const r = baseRadius + variation;
+                const ox = centerX + Math.cos(angle) * r;
+                const oy = centerY + Math.sin(angle) * r;
+                const dx = ox - segmentCenterX;
+                const dy = oy - segmentCenterY;
+                const rx = dx * cosRot - dy * sinRot;
+                const ry = dx * sinRot + dy * cosRot;
+                const x = segmentCenterX + rx;
+                const y = segmentCenterY + ry;
+                
+                if (posInSegment === fadeSegments) {
+                    ctx.moveTo(x, y);
+                } else {
+                    const prevIdx = posInSegment - 1;
+                    const prevAmplitude = ring.samples[prevIdx] || 0;
+                    const prevT = prevIdx / maxSamplesPerSegment;
+                    const prevAlpha = getSegmentFadeAlpha(prevT, fadeRatio); // 中间区域alpha=1.0
+                    const prevAngle = segmentStartAngle + prevT * segmentAngleSize;
+                    const prevVariation = (baseVariation + prevAmplitude * voiceVariation) * waveHeightScale * prevAlpha;
+                    const prevR = baseRadius + prevVariation;
+                    const prevOx = centerX + Math.cos(prevAngle) * prevR;
+                    const prevOy = centerY + Math.sin(prevAngle) * prevR;
+                    const prevDx = prevOx - segmentCenterX;
+                    const prevDy = prevOy - segmentCenterY;
+                    const prevRx = prevDx * cosRot - prevDy * sinRot;
+                    const prevRy = prevDx * sinRot + prevDy * cosRot;
+                    const prevX = segmentCenterX + prevRx;
+                    const prevY = segmentCenterY + prevRy;
+                    const cpX = (prevX + x) / 2;
+                    const cpY = (prevY + y) / 2;
+                    ctx.quadraticCurveTo(cpX, cpY, x, y);
+                }
+            }
+            ctx.stroke();
+            
+            // 结束渐变区域
+            ctx.beginPath();
+            for (let posInSegment = fadeSegments + solidSegments; posInSegment < actualSamplesToDraw; posInSegment++) {
+                const amplitude = ring.samples[posInSegment] || 0;
+                const t = posInSegment / maxSamplesPerSegment;
+                const alpha = getSegmentFadeAlpha(t, fadeRatio);
+                ctx.globalAlpha = savedAlpha * alpha;
+                
+                const angle = segmentStartAngle + t * segmentAngleSize;
+                const variation = (baseVariation + amplitude * voiceVariation) * waveHeightScale;
+                const r = baseRadius + variation;
+                const ox = centerX + Math.cos(angle) * r;
+                const oy = centerY + Math.sin(angle) * r;
+                const dx = ox - segmentCenterX;
+                const dy = oy - segmentCenterY;
+                const rx = dx * cosRot - dy * sinRot;
+                const ry = dx * sinRot + dy * cosRot;
+                const x = segmentCenterX + rx;
+                const y = segmentCenterY + ry;
+                
+                if (posInSegment === fadeSegments + solidSegments) {
+                    ctx.moveTo(x, y);
+                } else {
+                    const prevIdx = posInSegment - 1;
+                    const prevAmplitude = ring.samples[prevIdx] || 0;
+                    const prevT = prevIdx / maxSamplesPerSegment;
+                    const prevAngle = segmentStartAngle + prevT * segmentAngleSize;
+                    const prevVariation = (baseVariation + prevAmplitude * voiceVariation) * waveHeightScale;
+                    const prevR = baseRadius + prevVariation;
+                    const prevOx = centerX + Math.cos(prevAngle) * prevR;
+                    const prevOy = centerY + Math.sin(prevAngle) * prevR;
+                    const prevDx = prevOx - segmentCenterX;
+                    const prevDy = prevOy - segmentCenterY;
+                    const prevRx = prevDx * cosRot - prevDy * sinRot;
+                    const prevRy = prevDx * sinRot + prevDy * cosRot;
+                    const prevX = segmentCenterX + prevRx;
+                    const prevY = segmentCenterY + prevRy;
+                    const cpX = (prevX + x) / 2;
+                    const cpY = (prevY + y) / 2;
+                    ctx.quadraticCurveTo(cpX, cpY, x, y);
+                }
+            }
+            ctx.stroke();
+        }
+        
+        ctx.globalAlpha = savedAlpha;
+        
     } else {
         // Generic fallback - draw dots for all recorded samples
         // 优化：所有花瓣同时绘制，每个花瓣从自己的起点持续绘制到终点
@@ -1874,8 +3184,8 @@ function drawSegmentedVoiceprint(ring, ringIndex, maxSamples) {
                 // Calculate segment angles (pre-calculate for efficiency)
                 const segmentStartAngle = circleParams.globalRotation + segmentIdx * (segmentAngleSize + gapSize);
                 const segmentMidAngle = segmentStartAngle + segmentAngleSize * 0.5;
-                const centerX = config.centerX + Math.cos(segmentMidAngle) * baseRadius;
-                const centerY = config.centerY + Math.sin(segmentMidAngle) * baseRadius;
+                const segmentCenterX = centerX + Math.cos(segmentMidAngle) * baseRadius;
+                const segmentCenterY = centerY + Math.sin(segmentMidAngle) * baseRadius;
 
                 // Calculate angle（每个segment从自己的起点开始绘制）
                 // t基于固定的maxSamplesPerSegment计算，而不是基于动态的actualSamplesToDraw
@@ -1885,16 +3195,16 @@ function drawSegmentedVoiceprint(ring, ringIndex, maxSamples) {
                 // Calculate point (基础 + 用户声音)
                 const variation = (baseVar + amplitude * voiceVar) * waveHeightScale;
                 const r = baseRadius + variation;
-                const ox = config.centerX + Math.cos(angle) * r;
-                const oy = config.centerY + Math.sin(angle) * r;
+                const ox = centerX + Math.cos(angle) * r;
+                const oy = centerY + Math.sin(angle) * r;
 
                 // Apply self-rotation
-                const dx = ox - centerX;
-                const dy = oy - centerY;
+                const dx = ox - segmentCenterX;
+                const dy = oy - segmentCenterY;
                 const rx = dx * cosRot - dy * sinRot;
                 const ry = dx * sinRot + dy * cosRot;
-                const x = centerX + rx;
-                const y = centerY + ry;
+                const x = segmentCenterX + rx;
+                const y = segmentCenterY + ry;
 
                 ctx.fillStyle = getAmplitudeColor(amplitude);
                 ctx.shadowColor = ctx.fillStyle;
